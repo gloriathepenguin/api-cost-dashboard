@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Cost Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242736;
+    --border: #2e3247;
+    --text: #e8eaf0;
+    --muted: #7b82a0;
+    --accent: #6c6ff5;
+    --accent2: #5dd6b5;
+    --warn: #f5a623;
+    --danger: #f55c5c;
+    --ahrefs: #ff8c00;
+    --apptweak: #e91e8c;
+    --firecrawl: #22c55e;
+    --fal: #818cf8;
+    --deepgram: #06b6d4;
+    --elevenlabs: #a78bfa;
+    --other: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
+
+  header { padding: 20px 32px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header span { color: var(--muted); font-size: 13px; }
+
+  .layout { display: grid; grid-template-columns: 280px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+  .sidebar { padding: 24px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .main { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; overflow: auto; }
+
+  /* Sidebar nav */
+  .nav-section { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 8px 8px 4px; }
+  .nav-item { padding: 7px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--muted); transition: background .15s, color .15s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface2); color: var(--text); }
+  .nav-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .card-value { font-size: 26px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* Section header */
+  .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+  .badge-ahrefs  { background: rgba(255,140,0,.15); color: var(--ahrefs); }
+  .badge-apptweak{ background: rgba(233,30,140,.15); color: var(--apptweak); }
+  .badge-firecrawl{ background: rgba(34,197,94,.15); color: var(--firecrawl); }
+  .badge-fal     { background: rgba(129,140,248,.15); color: var(--fal); }
+  .badge-deepgram{ background: rgba(6,182,212,.15); color: var(--deepgram); }
+  .badge-elevenlabs{ background: rgba(167,139,250,.15); color: var(--elevenlabs); }
+
+  /* AppTweak budget */
+  .budget-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .budget-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .budget-total { font-size: 22px; font-weight: 700; color: var(--apptweak); }
+  .budget-bar-bg { background: var(--surface2); border-radius: 99px; height: 8px; overflow: hidden; }
+  .budget-bar-fill { height: 100%; border-radius: 99px; transition: width .4s; background: linear-gradient(90deg, var(--apptweak), #f06292); }
+  .budget-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
+  .budget-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .budget-legend-item b { color: var(--text); }
+
+  /* Mode cards for AppTweak */
+  .mode-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .mode-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; cursor: pointer; transition: border-color .15s; }
+  .mode-card:hover, .mode-card.selected { border-color: var(--apptweak); }
+  .mode-card .mode-name { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .mode-card .mode-credits { font-size: 18px; font-weight: 700; color: var(--apptweak); }
+  .mode-card .mode-usd { font-size: 12px; color: var(--muted); }
+  .mode-card .mode-runs { font-size: 11px; color: var(--accent2); margin-top: 4px; }
+
+  /* Calculator */
+  .calc-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .calc-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .calc-row:last-child { border-bottom: none; }
+  .calc-row label { flex: 1; color: var(--muted); font-size: 13px; }
+  .calc-row input[type=number] { width: 64px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 13px; text-align: right; }
+  .calc-row input[type=number]:focus { outline: none; border-color: var(--accent); }
+  .calc-row .calc-cost { font-weight: 600; width: 80px; text-align: right; font-size: 13px; }
+  .calc-total { margin-top: 14px; padding: 12px 16px; background: var(--surface2); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .calc-total-label { color: var(--muted); font-size: 13px; }
+  .calc-total-val { font-size: 22px; font-weight: 700; color: var(--accent2); }
+
+  /* Skills table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-filter { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+  .filter-btn { padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; transition: all .15s; }
+  .filter-btn:hover, .filter-btn.active { border-color: var(--accent); color: var(--text); background: rgba(108,111,245,.12); }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 10px 14px; text-align: left; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); font-weight: 500; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .provider-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .cost-range { color: var(--text); font-weight: 500; }
+  .cost-sub { color: var(--muted); font-size: 11px; }
+  .endpoint-list { color: var(--muted); font-size: 12px; }
+
+  /* Chart containers */
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-inner { position: relative; height: 220px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; background: var(--surface2); border-radius: 8px; padding: 3px; width: fit-content; }
+  .tab { padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all .15s; }
+  .tab.active { background: var(--surface); color: var(--text); }
+
+  .page { display: none; }
+  .page.active { display: flex; flex-direction: column; gap: 24px; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .ref-table { width: 100%; border-collapse: collapse; }
+  .ref-table th, .ref-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; text-align: left; }
+  .ref-table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 500; }
+  .ref-table tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>API Cost Dashboard</h1>
+    <span>brand-template skills · cost estimation & budget tracking</span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('overview', this)">
+      <span class="nav-dot" style="background:#6c6ff5"></span> Overview
+    </div>
+    <div class="nav-item" data-page="subscriptions" onclick="showPage('subscriptions', this)">
+      <span class="nav-dot" style="background:#f5a623"></span> Subscriptions
+    </div>
+
+    <div class="nav-section">Providers</div>
+    <div class="nav-item" onclick="showPage('apptweak', this)">
+      <span class="nav-dot" style="background:#e91e8c"></span> AppTweak
+    </div>
+    <div class="nav-item" onclick="showPage('ahrefs', this)">
+      <span class="nav-dot" style="background:#ff8c00"></span> Ahrefs
+    </div>
+    <div class="nav-item" onclick="showPage('media', this)">
+      <span class="nav-dot" style="background:#818cf8"></span> fal.ai / Deepgram
+    </div>
+    <div class="nav-item" onclick="showPage('scraping', this)">
+      <span class="nav-dot" style="background:#22c55e"></span> Firecrawl / Screenshot
+    </div>
+
+    <div class="nav-section">Tools</div>
+    <div class="nav-item" onclick="showPage('skills', this)">
+      <span class="nav-dot" style="background:#5dd6b5"></span> All Skills + Calculator
+    </div>
+    <div class="nav-item" onclick="showPage('refs', this)">
+      <span class="nav-dot" style="background:#94a3b8"></span> API References
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <div id="page-overview" class="page active">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Total Subscriptions</div>
+          <div class="card-value" style="color:var(--warn)">$646<span style="font-size:16px;font-weight:400">/mo</span></div>
+          <div class="card-sub">4 subscriptions · EL+DG TBD · <a href="#" onclick="showPage('subscriptions', document.querySelector('[data-page=subscriptions]'));return false" style="color:var(--accent);font-size:11px">view plans →</a></div>
+        </div>
+        <div class="card">
+          <div class="card-label">fal.ai / media</div>
+          <div class="card-value" style="color:var(--fal)">PAYG</div>
+          <div class="card-sub">Seedance $0.30/s · DG $0.017/min</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Providers</div>
+          <div class="card-value">8</div>
+          <div class="card-sub">paid third-party APIs</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Skills w/ API Cost</div>
+          <div class="card-value">13</div>
+          <div class="card-sub">out of 31 total</div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="chart-wrap">
+          <div class="section-title">End-to-end workflow cost <span style="font-size:12px;color:var(--muted);font-weight:400">mid-range estimate · includes all sub-skill API calls</span></div>
+          <div class="chart-inner" style="height:400px">
+            <canvas id="chartSkillCost"></canvas>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div class="section-title">Cost by provider (per run)</div>
+          <div class="chart-inner">
+            <canvas id="chartProviderPie"></canvas>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);padding:4px 0">
+        * Ahrefs costs use mid-range unit estimates at $0.0006225/unit. Compound skills sum all sub-skill API calls. keyword-spy range is wide (100–1000 rows) — mid ~$8. fal.ai / ElevenLabs are pay-as-you-go. Foreplay: $0.00099/credit · 1 credit/ad · ~100 ads/competitor.
+      </div>
+    </div>
+
+    <!-- SUBSCRIPTIONS -->
+    <div id="page-subscriptions" class="page">
+      <div class="table-wrap" style="padding:0">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Provider</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Plan</th>
+              <th style="padding:12px 16px;text-align:right;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Monthly</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Quota</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Unit rate</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Billing</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- GROUP: Monthly Subscriptions -->
+            <tr>
+              <td colspan="7" style="padding:10px 16px 6px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;background:var(--bg)">Monthly Subscriptions</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--apptweak)">AppTweak</b></td>
+              <td style="padding:14px 16px;font-size:13px">Small</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--apptweak)">$199</td>
+              <td style="padding:14px 16px;font-size:13px">250,000 credits / mo</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.000796 / cr</td>
+              <td style="padding:14px 16px;font-size:13px">Monthly · auto-renew</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Credits don't roll over. Unused credits expire end of billing cycle. health run ~4,200 cr ≈ $3.34.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--ahrefs)">Ahrefs</b></td>
+              <td style="padding:14px 16px;font-size:13px">API Integration</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--ahrefs)">$249</td>
+              <td style="padding:14px 16px;font-size:13px">400,000 units / mo</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.0006225 / unit</td>
+              <td style="padding:14px 16px;font-size:13px">Monthly · auto-renew</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Units = max(50, fields × rows). Premium fields (volume, difficulty, traffic, intents) = 10u each. Min 50u/call. See Ahrefs page for full formula.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:#f97316">Foreplay</b></td>
+              <td style="padding:14px 16px;font-size:13px">API (100K credits)</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:#f97316">$99</td>
+              <td style="padding:14px 16px;font-size:13px">100,000 credits / mo</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.00099 / credit<br>1 credit / ad returned</td>
+              <td style="padding:14px 16px;font-size:13px">Monthly · auto-renew</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Social ad inventory Meta/TikTok/LinkedIn. get_brands_by_domain free. get_ads_by_brand + discovery_search = 1cr/ad. 3 competitors × ~100 ads ≈ 300 cr ≈ $0.30/run.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:#8b5cf6">Creatify</b></td>
+              <td style="padding:14px 16px;font-size:13px">API Starter</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:#8b5cf6">$99</td>
+              <td style="padding:14px 16px;font-size:13px">500 credits / mo</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.198 / credit<br>Aurora: 1cr/s · Fast: 0.5cr/s<br>AI Scripts: 1cr/req · TTS: 1cr/30s</td>
+              <td style="padding:14px 16px;font-size:13px">Monthly · auto-renew</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Aurora avatar + lipsync. Track B (SaaS) only. Typical 15s avatar: 15cr (Aurora) + 1cr (Script) + 1cr (TTS) = <b>17 credits ≈ $3.37</b>. Aurora Fast = 0.5cr/s. Used by video-creative-pipeline.</td>
+            </tr>
+            <!-- Subtotal row -->
+            <tr style="border-top:2px solid var(--border);background:rgba(245,166,35,.06)">
+              <td colspan="2" style="padding:11px 16px;font-weight:600;font-size:13px;color:var(--muted)">Subscriptions subtotal</td>
+              <td style="padding:11px 16px;text-align:right;font-size:17px;font-weight:700;color:var(--warn)">$646</td>
+              <td colspan="4" style="padding:11px 16px;font-size:12px;color:var(--muted)">AppTweak $199 + Ahrefs $249 + Foreplay $99 + Creatify $99 · billed monthly</td>
+            </tr>
+
+            <!-- GROUP: Pay-as-you-go -->
+            <tr>
+              <td colspan="7" style="padding:18px 16px 6px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;background:var(--bg)">Pay-as-you-go</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--fal)">fal.ai</b></td>
+              <td style="padding:14px 16px;font-size:13px">Prepaid balance</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.30 / s (720p std)<br>$0.24 / s (720p fast)</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use · prepaid</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Seedance 2.0. Image-to-video ×0.6 discount. 10s clip ≈ $3.03 (standard).</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--deepgram)">Deepgram</b></td>
+              <td style="padding:14px 16px;font-size:13px">Pay-as-you-go</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.0059 / min<br>($0.35 / hr · Nova-2)</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Nova-2 pre-recorded transcription. 5-min video ≈ $0.030. Used by clip-video + video-creative-pipeline.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--elevenlabs)">ElevenLabs</b></td>
+              <td style="padding:14px 16px;font-size:13px">Pay-as-you-go</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace"><span style="color:#f59e0b">rate TBC</span><br>~$0.30 / 1K chars est.</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">TTS voiceover. Used by video-creative-pipeline. PAYG confirmed; exact $/char rate TBC — check ElevenLabs billing page.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:#64748b">DataForSEO</b></td>
+              <td style="padding:14px 16px;font-size:13px">Pay-as-you-go</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.002 / task<br>(standard SERP)</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use · prepaid</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Optional cross-validation only — fires when Ahrefs returns 0 paid pages. Used by keyword-spy, landing-page-spy, serp-ads-monitor, competitive-analysis.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--firecrawl)">Firecrawl</b></td>
+              <td style="padding:14px 16px;font-size:13px">Pay-as-you-go</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.002 / page</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Web scrape. Used by site-audit, landing-page-spy, generate-ad-creative.</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:14px 16px"><b style="color:var(--other)">ScreenshotOne</b></td>
+              <td style="padding:14px 16px;font-size:13px">Pay-as-you-go</td>
+              <td style="padding:14px 16px;text-align:right;font-size:16px;font-weight:700;color:var(--muted)">—</td>
+              <td style="padding:14px 16px;font-size:13px">No quota</td>
+              <td style="padding:14px 16px;font-size:13px;font-family:monospace">$0.003 / screenshot</td>
+              <td style="padding:14px 16px;font-size:13px">Per-use</td>
+              <td style="padding:14px 16px;font-size:12px;color:var(--muted)">Used by generate-ad-creative for style reference screenshot.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- APPTWEAK -->
+    <div id="page-apptweak" class="page">
+      <div class="budget-wrap">
+        <div class="budget-header">
+          <div>
+            <div class="card-label">Monthly Budget</div>
+            <div class="budget-total" id="budgetUsed">0 / 250,000 credits</div>
+            <div class="card-sub" id="budgetUSD">$0.00 consumed</div>
+          </div>
+          <div style="text-align:right">
+            <div class="card-label">Remaining</div>
+            <div style="font-size:18px;font-weight:700;color:var(--accent2)" id="budgetRemain">250,000 cr</div>
+            <div class="card-sub" id="budgetRuns">— runs left</div>
+          </div>
+        </div>
+        <div class="budget-bar-bg">
+          <div class="budget-bar-fill" id="budgetBar" style="width:0%"></div>
+        </div>
+        <div class="budget-legend">
+          <div class="budget-legend-item"><span class="nav-dot" style="background:var(--apptweak)"></span> Used: <b id="legendUsed">0 cr</b></div>
+          <div class="budget-legend-item"><span class="nav-dot" style="background:var(--surface2);border:1px solid var(--border)"></span> Free: <b id="legendFree">250,000 cr</b></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Modes — click to simulate budget usage <span class="badge badge-apptweak">Small plan · $0.000796/cr</span></div>
+        <div class="mode-cards" id="modeCards"></div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted)">* Click a mode to simulate budget usage and view its credit breakdown below. Health mode: 1 app · 1 market · 50 kw enrichment. Keywords mode: keyword_metrics 30 kw + suggestions. Reviews mode: 3 countries. Chart mode: 1 category.</div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="section-title" id="breakdownTitle">health (default) — credit breakdown by step</div>
+        <div class="chart-inner">
+          <canvas id="chartHealthBreakdown"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- AHREFS -->
+    <div id="page-ahrefs" class="page">
+      <div class="card" style="padding:16px 20px">
+        <div class="card-label">Billing model</div>
+        <div style="color:var(--text);margin-top:4px">Units per call — minimum <b>50 units/call</b>. Actual = columns selected × rows returned. Read <code>x-api-units-cost-total-actual</code> response header for the exact value.</div>
+        <div style="margin-top:8px;font-size:13px">Plan rate: <b style="color:var(--ahrefs)">$0.0006225/unit</b> ($249/mo ÷ 400,000 units). 10-unit fields: <code>volume, difficulty, traffic, traffic_potential, intents, keyword_difficulty</code>. 1-unit fields: <code>keyword, cpc, url, position</code>.</div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="section-title">Typical Ahrefs units per skill run <span class="badge badge-ahrefs">midpoint estimate</span></div>
+        <div class="chart-inner" style="height:280px">
+          <canvas id="chartAhrefsUnits"></canvas>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Skill</th><th>Endpoints called</th><th>Units/run (min–max)</th><th>Est. USD/run</th><th>Notes</th></tr></thead>
+          <tbody id="ahrefsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MEDIA -->
+    <div id="page-media" class="page">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Seedance 720p Standard</div>
+          <div class="card-value" style="color:var(--fal)">$0.30<span style="font-size:14px">/s</span></div>
+          <div class="card-sub">10s clip ≈ $3.03 via fal.ai</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Seedance 720p Fast</div>
+          <div class="card-value" style="color:var(--fal)">$0.24<span style="font-size:14px">/s</span></div>
+          <div class="card-sub">10s clip ≈ $2.42 via fal.ai</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Deepgram Nova-2</div>
+          <div class="card-value" style="color:var(--deepgram)">$0.017<span style="font-size:14px">/min</span></div>
+          <div class="card-sub">5-min video ≈ $0.083</div>
+        </div>
+        <div class="card">
+          <div class="card-label">ElevenLabs TTS</div>
+          <div class="card-value" style="color:var(--elevenlabs)">$30<span style="font-size:14px">/1M ch</span></div>
+          <div class="card-sub">1,000 chars ≈ $0.03 (Creator plan)</div>
+        </div>
+      </div>
+
+      <div class="calc-wrap">
+        <div class="section-title">Video pipeline cost estimator</div>
+        <table style="width:100%">
+          <tr>
+            <td style="padding:10px 0;color:var(--muted);font-size:13px;width:200px">Seedance clip duration (sec)</td>
+            <td><input type="number" id="seedanceDur" value="10" min="1" max="60" oninput="calcMedia()" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px"></td>
+            <td style="text-align:right">
+              <div style="font-size:13px;color:var(--muted)">Standard: <b id="seedanceStd" style="color:var(--fal)">$3.00</b> · Fast: <b id="seedanceFast" style="color:var(--fal)">$2.40</b></div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;color:var(--muted);font-size:13px">Deepgram audio (min)</td>
+            <td><input type="number" id="deepgramMin" value="5" min="0" oninput="calcMedia()" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px"></td>
+            <td style="text-align:right"><b id="deepgramCost" style="color:var(--deepgram)">$0.08</b></td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;color:var(--muted);font-size:13px">ElevenLabs TTS (chars)</td>
+            <td><input type="number" id="elevenChars" value="1000" min="0" oninput="calcMedia()" style="width:70px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px"></td>
+            <td style="text-align:right"><b id="elevenCost" style="color:var(--elevenlabs)">$0.03</b></td>
+          </tr>
+        </table>
+        <div class="calc-total" style="margin-top:12px">
+          <span class="calc-total-label">Est. pipeline total (standard)</span>
+          <span class="calc-total-val" id="mediaTotalStd">$3.11</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCRAPING -->
+    <div id="page-scraping" class="page">
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Firecrawl / scrape</div>
+          <div class="card-value" style="color:var(--firecrawl)">$0.002</div>
+          <div class="card-sub">per page · Starter plan</div>
+        </div>
+        <div class="card">
+          <div class="card-label">ScreenshotOne</div>
+          <div class="card-value" style="color:var(--other)">$0.003</div>
+          <div class="card-sub">per screenshot · pay-as-you-go</div>
+        </div>
+        <div class="card">
+          <div class="card-label">DataForSEO</div>
+          <div class="card-value" style="color:var(--other)">$0.002</div>
+          <div class="card-sub">per task · standard SERP</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Google PageSpeed</div>
+          <div class="card-value" style="color:var(--accent2)">Free</div>
+          <div class="card-sub">quota-limited</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Skill</th><th>Provider</th><th>Trigger</th><th>Calls/run</th><th>Est. cost</th></tr></thead>
+          <tbody>
+            <tr><td>site-audit</td><td><span class="provider-tag badge-firecrawl" style="background:rgba(34,197,94,.15);color:var(--firecrawl)">Firecrawl</span></td><td>Tier B deep audit (top 3 pages)</td><td>3–5</td><td class="cost-range">$0.006–$0.010</td></tr>
+            <tr><td>landing-page-spy</td><td><span class="provider-tag badge-firecrawl" style="background:rgba(34,197,94,.15);color:var(--firecrawl)">Firecrawl</span></td><td>Tier A unknown pages + Tier B top 3</td><td>1–10 / competitor</td><td class="cost-range">$0.002–$0.020</td></tr>
+            <tr><td>generate-ad-creative</td><td><span class="provider-tag" style="background:rgba(108,111,245,.15);color:#6c6ff5">Gemini</span></td><td>Image generation (hero + variations + resizes)</td><td>1–10</td><td class="cost-range" style="color:#f59e0b">TBD (preview pricing)</td></tr>
+            <tr><td>generate-ad-creative</td><td><span class="provider-tag badge-firecrawl" style="background:rgba(34,197,94,.15);color:var(--firecrawl)">Firecrawl</span></td><td>Landing page scrape</td><td>1</td><td class="cost-range">$0.002</td></tr>
+            <tr><td>generate-ad-creative</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--other)">ScreenshotOne</span></td><td>Style reference screenshot</td><td>1</td><td class="cost-range">$0.003</td></tr>
+            <tr><td>keyword-spy</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--other)">DataForSEO</span></td><td>Cross-validation (optional, Ahrefs=0)</td><td>0–N</td><td class="cost-range">$0 (conditional)</td></tr>
+            <tr><td>serp-ads-monitor</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--other)">DataForSEO</span></td><td>Cross-validation (optional)</td><td>0–N</td><td class="cost-range">$0 (conditional)</td></tr>
+            <tr><td>landing-page-spy</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--other)">DataForSEO</span></td><td>Cross-validation (optional)</td><td>0–N</td><td class="cost-range">$0 (conditional)</td></tr>
+            <tr><td>site-audit</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--accent2)">PageSpeed</span></td><td>Tier B only</td><td>1–3</td><td class="cost-range">Free</td></tr>
+            <tr><td>landing-page-spy</td><td><span class="provider-tag" style="background:rgba(148,163,184,.1);color:var(--accent2)">PageSpeed</span></td><td>Tier B only</td><td>1–3/competitor</td><td class="cost-range">Free</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ALL SKILLS + CALCULATOR -->
+    <div id="page-skills" class="page">
+      <div class="table-wrap">
+        <div class="table-filter" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div id="filterBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          <span style="font-size:12px;color:var(--muted)">Ahrefs = mid-range units × rate · enter Runs/mo to compute monthly</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Skill</th>
+            <th>Provider(s)</th>
+            <th id="costSortTh" onclick="cycleSortSkills()" style="cursor:pointer;user-select:none;white-space:nowrap">
+              Est. cost/run <span id="costSortIcon" style="font-size:11px;color:var(--muted);margin-left:3px">⇅</span>
+            </th>
+            <th style="text-align:center;width:80px">Runs/mo</th>
+            <th style="text-align:right;width:100px">Monthly</th>
+          </tr></thead>
+          <tbody id="skillsTable"></tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border)">
+              <td colspan="3" style="padding:12px 14px;font-weight:600;color:var(--muted)">Total estimated monthly cost</td>
+              <td></td>
+              <td style="padding:12px 14px;text-align:right;font-size:18px;font-weight:700;color:var(--accent2)" id="skillsGrandTotal">$0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- REFS -->
+    <div id="page-refs" class="page">
+      <div class="table-wrap" style="padding:0">
+        <table class="ref-table">
+          <thead><tr><th>Provider</th><th>Documentation</th><th>Used by</th></tr></thead>
+          <tbody id="refsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const APPTWEAK_RATE = 0.000796;
+const MONTHLY_CREDITS = 250000;
+const AHREFS_RATE = 0.0006225;    // $249/mo ÷ 400,000 units
+const AHREFS_MONTHLY_UNITS = 400000;
+const FOREPLAY_RATE = 0.00099;    // $99/mo ÷ 100,000 credits
+const FOREPLAY_MONTHLY_CREDITS = 100000;
+
+const apptweakModes = [
+  { name: 'health (default)', credits: 4200, note: '1 app · 1 market',
+    breakdown: {
+      labels: ['market scan\n(24 mkts)', 'metrics_current\n+ history', 'keyword_metrics\n(50 kw)', 'reviews_top ×2', 'reviews_stats', 'rankings\nhistory', 'metadata\n+ changes', 'keyword_sugg.'],
+      data:   [264,                       1032,                          2510,                       202,               39,              40,                 52,                   51] }},
+  { name: 'health + --probe-paid', credits: 5300, note: '+paid_keywords',
+    breakdown: {
+      labels: ['market scan\n(24 mkts)', 'metrics_current\n+ history', 'keyword_metrics\n(50 kw)', 'reviews_top ×2', 'reviews_stats', 'rankings\nhistory', 'metadata\n+ changes', 'keyword_sugg.', 'paid_keywords\n(ASA, 1 app)'],
+      data:   [264,                       1032,                          2510,                       202,               39,              40,                 52,                   51,               1095] }},
+  { name: 'keywords', credits: 2000, note: '1 app · 1 market',
+    breakdown: {
+      labels: ['keyword_metrics\n(30 kw, 6 batches)', 'keyword_sugg.\ncategory', 'keyword_rankings\ncurrent', 'keyword_sugg.\napp'],
+      data:   [1506,                                   494,                       0,                            0] }},
+  { name: 'reviews', credits: 600, note: '1 app · 3 countries',
+    breakdown: {
+      labels: ['reviews_top\n(most_critical ×3)', 'reviews_stats\n(×3 countries)', 'keyword_rankings\n(basic check)', 'metadata\n+ changes'],
+      data:   [303,                                120,                              125,                              52] }},
+  { name: 'reviews + UGC', credits: 700, note: '+101 cr/app/country',
+    breakdown: {
+      labels: ['reviews_top\n(most_critical ×3)', 'reviews_stats\n(×3 countries)', 'keyword_rankings\n(basic check)', 'metadata\n+ changes', 'reviews_top\n(most_useful, UGC)'],
+      data:   [303,                                120,                              125,                              52,                    101] }},
+  { name: 'chart', credits: 30, note: '1 category',
+    breakdown: {
+      labels: ['top_charts_current\n(free)', 'top_charts_current\n(grossing)', 'top_charts_history\n(7d trend)'],
+      data:   [11,                            11,                               8] }},
+];
+
+// Units calculated with formula: max(50, per_row_cost × rows)
+// 10-unit fields: volume, difficulty, traffic, traffic_potential, intents, sum_traffic, keyword_difficulty
+// 5-unit fields: all_positions
+// 1-unit fields: keyword, cpc, url, position, parent_topic, etc.
+const ahrefsSkills = [
+  { skill: 'ahrefs-keyword-discovery', unitsMin: 3260,  unitsMax: 8850,
+    note: '3 seeds × 3 endpoints (limit=30, select=keyword) = 9 calls × 50u = 450u. Dedup → typically 50–180 unique kw through overview @ 43u/row. Top-5 volume-history = 660u. Hard cap: 500 kw (extreme: 22,910u / $14.27).',
+    endpoints: ['matching-terms (select=keyword → 50u/call)', 'related-terms (50u/call)', 'search-suggestions (50u/call)', 'overview (43u/row: 7 fields)', 'volume-history (11u/row × 12mo × 5kw)'] },
+  { skill: 'keyword-spy',              unitsMin: 3200,  unitsMax: 9000,
+    note: 'organic-keywords: select=keyword,volume,cpc,difficulty,position,url,intents → 34u/row. Competitor: volume>200 + position≤20, limit=100 (~30–80 rows). Own domain: volume>200, limit=100 (~40–100 rows). Aligned with keyword-discovery volume threshold.',
+    endpoints: ['organic-keywords competitor (34u/row, position≤20, vol>200, limit=100)', 'organic-keywords own domain (34u/row, vol>200, limit=100)', 'paid-pages (24u/row, limit=50)', 'serp-overview ×20 gap kw (~150u/call)', 'kw-overview top-10 (43u/row)'] },
+  { skill: 'backlink-profiler',        unitsMin: 400,   unitsMax: 6000,
+    note: 'Most endpoints return 1 row → 50u min. Backlinks list with traffic field is expensive.',
+    endpoints: ['metrics/domain-rating (50u min each)', 'backlinks-stats (50u)', 'refdomains (1u/row × N)', 'anchors (1u/row)', 'broken-backlinks (1u/row)'] },
+  { skill: 'find-competitors',         unitsMin: 400,   unitsMax: 1500,
+    note: 'organic-competitors typically returns 10–20 rows at ~2u/row → 50u min each',
+    endpoints: ['organic-competitors (50u min)', 'serp-overview (50u/kw)', 'top-pages (1u/row)', 'metrics (50u min)', 'kw-overview (43u/row × count)'] },
+  { skill: 'site-audit',               unitsMin: 100,   unitsMax: 100,
+    note: 'audit-projects FREE. issues + page-explorer both fixed 50u each.',
+    endpoints: ['audit-projects (FREE)', 'audit-issues (50u fixed)', 'page-explorer (50u fixed)'] },
+  { skill: 'trend-analyzer',           unitsMin: 550,   unitsMax: 2200,
+    note: 'volume-history: 11u/row × ~12 months × 5 kw = 660u. kw-overview 43u/row × kw count.',
+    endpoints: ['volume-history (11u/row: volume=10 + date=1)', 'volume-by-country (11u/row)', 'kw-overview (43u/row)', 'serp-overview (50u/kw)'] },
+  { skill: 'serp-ads-monitor',         unitsMin: 500,   unitsMax: 4300,
+    note: 'serp-overview 50u/kw. kw-overview 43u/row × kw count.',
+    endpoints: ['serp-overview (50u/kw × N kw)', 'kw-overview batch (43u/row × N kw)'] },
+  { skill: 'landing-page-spy',         unitsMin: 600,   unitsMax: 5000,
+    note: 'paid-pages: if traffic selected = 10u/row; kw-overview 43u/row × ~100 kw = 4,300u',
+    endpoints: ['paid-pages (10u/row if traffic selected)', 'kw-overview (43u/row × kw count ⚠️)'] },
+  { skill: 'mention-tracker',          unitsMin: 200,   unitsMax: 600,
+    note: 'All management endpoints FREE. Brand Radar data endpoints ~50u each.',
+    endpoints: ['brand-radar management (FREE)', 'mentions-overview (~50u)', 'sov-overview (~50u)', 'cited-pages (~50u)', 'ai-responses (~50u/source)'] },
+  { skill: 'ads-media-plan',           unitsMin: 500,   unitsMax: 5000,
+    note: 'Direct calls only (sub-skills log separately). kw-overview is biggest cost driver.',
+    endpoints: ['paid-pages (10u/row)', 'kw-overview (43u/row × count)', 'serp-overview (50u/kw)'] },
+];
+
+const allSkills = [
+  { skill: 'ahrefs-keyword-discovery', providers: ['Ahrefs'],              ahrefsKey: 'ahrefs-keyword-discovery' },
+  { skill: 'keyword-spy',              providers: ['Ahrefs'],              ahrefsKey: 'keyword-spy' },
+  { skill: 'backlink-profiler',        providers: ['Ahrefs'],              ahrefsKey: 'backlink-profiler' },
+  { skill: 'find-competitors',         providers: ['Ahrefs'],              ahrefsKey: 'find-competitors' },
+  { skill: 'site-audit',               providers: ['Ahrefs', 'Firecrawl'], ahrefsKey: 'site-audit',     costLow: 0.006, costHigh: 0.01,  costNote: '+Ahrefs units above' },
+  { skill: 'trend-analyzer',           providers: ['Ahrefs'],              ahrefsKey: 'trend-analyzer' },
+  { skill: 'serp-ads-monitor',         providers: ['Ahrefs'],              ahrefsKey: 'serp-ads-monitor' },
+  { skill: 'landing-page-spy',         providers: ['Ahrefs', 'Firecrawl'], ahrefsKey: 'landing-page-spy', costLow: 0.006, costHigh: 0.02, costNote: '+Ahrefs below' },
+  { skill: 'mention-tracker',          providers: ['Ahrefs'],              ahrefsKey: 'mention-tracker' },
+  { skill: 'ads-media-plan',           providers: ['Ahrefs'],              ahrefsKey: 'ads-media-plan',  costNote: 'direct calls only (sub-skills billed separately)' },
+  { skill: 'app-store-spy (health)',   providers: ['AppTweak'],            costLow: 3.34, costHigh: 4.22, units: '~4,200 cr',  costNote: 'per app · 1 market' },
+  { skill: 'app-store-spy (keywords)', providers: ['AppTweak'],            costLow: 1.19, costHigh: 1.99, units: '~2,000 cr',  costNote: '' },
+  { skill: 'app-store-spy (chart)',    providers: ['AppTweak'],            costLow: 0.01, costHigh: 0.04, units: '~30 cr',     costNote: '' },
+  { skill: 'app-store-spy (reviews)',  providers: ['AppTweak'],            costLow: 0.40, costHigh: 0.56, units: '~600 cr',    costNote: '' },
+  // ── Orchestration skills ──────────────────────────────────────────────────
+  { skill: 'competitive-analysis (--scope ads)',        providers: ['Foreplay', 'Ahrefs', 'Gemini'],                       costLow: 2.50, costHigh: 3.30, costNote: 'find-comp + ad-creative-spy + lp-spy',
+    breakdown: [
+      { label: 'find-competitors',            note: '~$0.59', provider: 'Ahrefs' },
+      { label: 'ad-creative-spy',             note: '~$0.30 (~100 ads × 3 competitors)', provider: 'Foreplay' },
+      { label: 'landing-page-spy',            note: '~$1.74', provider: 'Ahrefs + Firecrawl' },
+      { label: 'generate-ad-creative (hero)', note: '~$0.07', provider: 'Gemini' },
+    ]},
+  { skill: 'competitive-analysis (--scope google-ads)', providers: ['Ahrefs', 'Firecrawl'],                                costLow: 5.00, costHigh: 7.00, costNote: 'find-comp + kw-spy + serp + lp-spy',
+    breakdown: [
+      { label: 'find-competitors',  note: '~$0.59', provider: 'Ahrefs' },
+      { label: 'keyword-spy',       note: '~$2.20', provider: 'Ahrefs' },
+      { label: 'serp-ads-monitor',  note: '~$1.49', provider: 'Ahrefs' },
+      { label: 'landing-page-spy',  note: '~$1.74', provider: 'Ahrefs + Firecrawl' },
+    ]},
+  { skill: 'competitive-analysis (--scope geo)',        providers: ['Ahrefs'],                                             costLow: 0.60, costHigh: 1.00, costNote: 'find-comp + geo-analysis',
+    breakdown: [
+      { label: 'find-competitors', note: '~$0.59', provider: 'Ahrefs' },
+      { label: 'geo-analysis',     note: '~$0.25', provider: 'Ahrefs' },
+    ]},
+  { skill: 'competitive-analysis (--scope all)',        providers: ['Ahrefs', 'Foreplay', 'Gemini', 'Firecrawl', 'AppTweak'], costLow: 8.00, costHigh: 11.00, costNote: 'all 3 scopes in parallel',
+    breakdown: [
+      { label: 'find-competitors (shared)',    note: '~$0.59', provider: 'Ahrefs' },
+      { label: 'keyword-spy',                  note: '~$2.20', provider: 'Ahrefs' },
+      { label: 'serp-ads-monitor',             note: '~$1.49', provider: 'Ahrefs' },
+      { label: 'landing-page-spy (shared)',    note: '~$1.74', provider: 'Ahrefs + Firecrawl' },
+      { label: 'ad-creative-spy',              note: '~$0.30', provider: 'Foreplay' },
+      { label: 'app-store-spy (health)',        note: '~$3.34', provider: 'AppTweak' },
+      { label: 'geo-analysis',                 note: '~$0.25', provider: 'Ahrefs' },
+      { label: 'generate-ad-creative (hero)',  note: '~$0.07', provider: 'Gemini' },
+    ]},
+  { skill: 'geo-analysis',                              providers: ['Ahrefs'],                                             costLow: 0.12, costHigh: 0.37, costNote: 'Brand Radar endpoints (≈mention-tracker)' },
+  // ── Atomic skills ─────────────────────────────────────────────────────────
+  { skill: 'ad-creative-spy',          providers: ['Foreplay', 'Ahrefs'],  costLow: 0.20, costHigh: 0.50, costNote: '~200–500 cr (3 competitors × ~100 ads each) + Ahrefs' },
+  { skill: 'generate-ad-creative (hero only)',        providers: ['Gemini', 'Firecrawl', 'ScreenshotOne'], costLow: 0.072, costHigh: 0.072, costNote: '1 image $0.067 + FC $0.002 + SO $0.003' },
+  { skill: 'generate-ad-creative (+ --variations 7)', providers: ['Gemini', 'Firecrawl', 'ScreenshotOne'], costLow: 0.541, costHigh: 0.541, costNote: '8 images × $0.067 + FC + SO' },
+  { skill: 'generate-ad-creative (+ --resize)',       providers: ['Gemini', 'Firecrawl', 'ScreenshotOne'], costLow: 0.206, costHigh: 0.206, costNote: '3 images × $0.067 + FC + SO' },
+  { skill: 'clip-video',               providers: ['Deepgram'],            costLow: 0.05, costHigh: 0.15, costNote: '~5 min video' },
+  { skill: 'video-creative-pipeline (Track A)', providers: ['fal.ai', 'ElevenLabs', 'Deepgram', 'Foreplay'], costLow: 2.80, costHigh: 5.20, costNote: 'Seedance + EL VO + DG transcript + Foreplay',
+    breakdown: [
+      { label: 'Seedance video gen',     note: '~$3.03 (avg 10s)', provider: 'fal.ai' },
+      { label: 'ElevenLabs VO',          note: '~$0.03',           provider: 'ElevenLabs' },
+      { label: 'Deepgram transcript',    note: '~$0.03',           provider: 'Deepgram' },
+      { label: 'ad-creative-spy (ref)',  note: '~$0.30',           provider: 'Foreplay' },
+      { label: 'find-competitors',       note: '~$0.59',           provider: 'Ahrefs' },
+    ]},
+  { skill: 'video-creative-pipeline (Track B)', providers: ['Creatify', 'Deepgram', 'Foreplay'],              costLow: 3.37, costHigh: 6.53, costNote: 'Aurora 15–30s ($2.97–$5.94) + TTS + Script + DG',
+    breakdown: [
+      { label: 'Creatify Aurora 15–30s', note: '$2.97–$5.94 (15–30 cr)', provider: 'Creatify' },
+      { label: 'Creatify Script + TTS',  note: '~$0.40 (2 cr)',          provider: 'Creatify' },
+      { label: 'Deepgram transcript',    note: '~$0.03',                  provider: 'Deepgram' },
+      { label: 'ad-creative-spy (ref)',  note: '~$0.30',                  provider: 'Foreplay' },
+      { label: 'find-competitors',       note: '~$0.59',                  provider: 'Ahrefs' },
+    ]},
+];
+
+
+const refs = [
+  { provider: 'Ahrefs',        url: 'https://docs.ahrefs.com/docs/api/reference/introduction', skills: 'keyword-spy, backlink-profiler, find-competitors, trend-analyzer, serp-ads-monitor, landing-page-spy, mention-tracker, ads-media-plan, site-audit' },
+  { provider: 'AppTweak',      url: 'https://developers.apptweak.com/reference/overview', skills: 'app-store-spy' },
+  { provider: 'Firecrawl',     url: 'https://docs.firecrawl.dev/api-reference/v2-introduction', skills: 'site-audit, landing-page-spy, generate-ad-creative' },
+  { provider: 'DataForSEO',    url: 'https://docs.dataforseo.com/v3/', skills: 'keyword-spy, serp-ads-monitor, landing-page-spy (optional)' },
+  { provider: 'Deepgram',      url: 'https://developers.deepgram.com/reference/deepgram-api-overview', skills: 'clip-video, video-creative-pipeline' },
+  { provider: 'ElevenLabs',    url: 'https://elevenlabs.io/docs/api-reference/introduction', skills: 'video-creative-pipeline' },
+  { provider: 'fal.ai (Seedance)', url: 'https://fal.ai/docs', skills: 'video-creative-pipeline' },
+  { provider: 'ScreenshotOne', url: 'https://screenshotone.com/docs/getting-started/', skills: 'generate-ad-creative' },
+  { provider: 'Foreplay',      url: 'https://app.foreplay.co/api-credits', skills: 'ad-creative-spy, competitive-analysis (--scope ads/all), video-creative-pipeline' },
+  { provider: 'Creatify',      url: 'https://docs.creatify.ai/billing', skills: 'video-creative-pipeline (Track B) · Aurora: 1cr/s · Fast: 0.5cr/s · Script: 1cr · TTS: 1cr/30s' },
+  { provider: 'Google PageSpeed', url: 'https://developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed', skills: 'site-audit, landing-page-spy (free)' },
+];
+
+const providerColors = {
+  Ahrefs: '#ff8c00', AppTweak: '#e91e8c', Firecrawl: '#22c55e',
+  'fal.ai': '#818cf8', Deepgram: '#06b6d4', ElevenLabs: '#a78bfa',
+  Foreplay: '#f97316', Creatify: '#8b5cf6', ScreenshotOne: '#94a3b8', DataForSEO: '#64748b',
+};
+
+// ─── Sidebar navigation ───────────────────────────────────────────────────────
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ─── AppTweak budget simulator ────────────────────────────────────────────────
+
+let usedCredits = 0;
+
+function renderModeCards() {
+  const el = document.getElementById('modeCards');
+  el.innerHTML = apptweakModes.map((m, i) => `
+    <div class="mode-card" id="mc${i}" onclick="addCredits(${m.credits}, ${i})">
+      <div class="mode-name">${m.name}</div>
+      <div class="mode-credits">${m.credits.toLocaleString()} cr</div>
+      <div class="mode-usd">$${(m.credits * APPTWEAK_RATE).toFixed(2)}</div>
+      <div class="mode-runs">${Math.floor(MONTHLY_CREDITS / m.credits).toLocaleString()} runs/month budget</div>
+      <div class="mode-name" style="margin-top:4px">${m.note}</div>
+    </div>
+  `).join('');
+}
+
+function addCredits(n, idx) {
+  usedCredits = Math.min(usedCredits + n, MONTHLY_CREDITS);
+  updateBudget();
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('mc' + idx).classList.add('selected');
+  updateBreakdownChart(apptweakModes[idx]);
+}
+
+function updateBudget() {
+  const pct = (usedCredits / MONTHLY_CREDITS) * 100;
+  const remain = MONTHLY_CREDITS - usedCredits;
+  document.getElementById('budgetUsed').textContent = `${usedCredits.toLocaleString()} / ${MONTHLY_CREDITS.toLocaleString()} credits`;
+  document.getElementById('budgetUSD').textContent = `$${(usedCredits * APPTWEAK_RATE).toFixed(2)} consumed`;
+  document.getElementById('budgetRemain').textContent = `${remain.toLocaleString()} cr`;
+  document.getElementById('budgetBar').style.width = pct + '%';
+  document.getElementById('legendUsed').textContent = usedCredits.toLocaleString() + ' cr';
+  document.getElementById('legendFree').textContent = remain.toLocaleString() + ' cr';
+  // color warning
+  const fill = document.getElementById('budgetBar');
+  if (pct > 85) fill.style.background = 'linear-gradient(90deg,var(--danger),#ff6b6b)';
+  else if (pct > 60) fill.style.background = 'linear-gradient(90deg,var(--warn),#ffb347)';
+  else fill.style.background = 'linear-gradient(90deg,var(--apptweak),#f06292)';
+  // reset button hint
+  if (usedCredits >= MONTHLY_CREDITS) {
+    document.getElementById('budgetRuns').textContent = '⚠️ budget exhausted — click cards to reset';
+    document.getElementById('budgetRuns').style.color = 'var(--danger)';
+  } else {
+    const healthRunsLeft = Math.floor(remain / 4200);
+    document.getElementById('budgetRuns').textContent = `≈ ${healthRunsLeft} health runs remaining`;
+    document.getElementById('budgetRuns').style.color = 'var(--accent2)';
+  }
+}
+
+// double-click card to reset
+document.addEventListener('dblclick', e => {
+  if (e.target.closest('.mode-card')) { usedCredits = 0; updateBudget(); }
+});
+
+// ─── Media calculator ─────────────────────────────────────────────────────────
+
+function calcMedia() {
+  const dur = parseFloat(document.getElementById('seedanceDur').value) || 0;
+  const min = parseFloat(document.getElementById('deepgramMin').value) || 0;
+  const chars = parseFloat(document.getElementById('elevenChars').value) || 0;
+  const std = dur * 0.3034;
+  const fast = dur * 0.2419;
+  const dg = min * 60 * 0.000278;
+  const el = chars * 0.00003;
+  document.getElementById('seedanceStd').textContent = '$' + std.toFixed(2);
+  document.getElementById('seedanceFast').textContent = '$' + fast.toFixed(2);
+  document.getElementById('deepgramCost').textContent = '$' + dg.toFixed(3);
+  document.getElementById('elevenCost').textContent = '$' + el.toFixed(3);
+  document.getElementById('mediaTotalStd').textContent = '$' + (std + dg + el).toFixed(2);
+}
+
+// ─── Cost calculator table ────────────────────────────────────────────────────
+
+
+// ─── All skills table ─────────────────────────────────────────────────────────
+
+let activeFilter = 'all';
+
+function getAhrefsRate() {
+  return AHREFS_RATE;
+}
+
+const ahrefsLookup = Object.fromEntries(ahrefsSkills.map(a => [a.skill, a]));
+
+function getSkillCostRange(s) {
+  const rate = getAhrefsRate();
+  if (s.ahrefsKey && ahrefsLookup[s.ahrefsKey]) {
+    const a = ahrefsLookup[s.ahrefsKey];
+    const lo = a.unitsMin * rate + (s.costLow || 0);
+    const hi = a.unitsMax * rate + (s.costHigh || 0);
+    const unitNote = `${a.unitsMin.toLocaleString()}–${a.unitsMax.toLocaleString()} units`;
+    const fcNote = s.costLow != null ? ` + Firecrawl` : '';
+    return { lo, hi, sub: `${unitNote}${fcNote}` };
+  }
+  if (s.costLow != null) {
+    return { lo: s.costLow, hi: s.costHigh, sub: s.costNote || '' };
+  }
+  return { lo: 0, hi: 0, sub: '—' };
+}
+
+function getSkillCostMid(s) {
+  const { lo, hi } = getSkillCostRange(s);
+  return (lo + hi) / 2;
+}
+
+function skillRowId(s) {
+  return 'sr_' + s.skill.replace(/[^a-z0-9]/gi, '_');
+}
+
+// Render all rows once; filtering just shows/hides rows (preserves input values)
+function renderSkillsTable() {
+  const rate = getAhrefsRate();
+  const tbody = document.getElementById('skillsTable');
+  let html = '';
+  allSkills.forEach((s, i) => {
+    const { lo, hi, sub } = getSkillCostRange(s);
+    const costHtml = lo === 0 && hi === 0
+      ? `<span class="cost-range">—</span>`
+      : `<span class="cost-range">$${lo.toFixed(2)}–$${hi.toFixed(2)}</span>${sub ? `<br><span class="cost-sub">${sub}</span>` : ''}`;
+    const tags = s.providers.map(p => {
+      const color = providerColors[p] || '#94a3b8';
+      return `<span class="provider-tag" style="background:${color}22;color:${color}">${p}</span>`;
+    }).join(' ');
+    const providerStr = s.providers.map(p => p.toLowerCase()).join(',');
+    const toggleBtn = s.breakdown
+      ? `<button id="bdtoggle-${i}" onclick="toggleBreakdown(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 4px 0 0;vertical-align:middle;line-height:1" title="展开费用明细">▶</button>`
+      : '';
+    html += `<tr id="${skillRowId(s)}" data-providers="${providerStr}" data-idx="${i}" data-cost-mid="${getSkillCostMid(s).toFixed(4)}">
+      <td>${toggleBtn}${s.skill}</td>
+      <td>${tags}</td>
+      <td>${costHtml}</td>
+      <td style="text-align:center">
+        <input type="number" value="0" min="0" id="sRuns_${i}"
+          style="width:56px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:13px;text-align:center"
+          oninput="updateSkillsTotal()">
+      </td>
+      <td style="text-align:right;font-weight:600;font-size:13px" id="sMonthly_${i}">—</td>
+    </tr>`;
+    if (s.breakdown) {
+      s.breakdown.forEach(bd => {
+        const bdColor = providerColors[bd.provider] || providerColors[bd.provider?.split(' ')[0]] || '#94a3b8';
+        html += `<tr class="breakdown-row bdr-${i}" data-providers="${providerStr}" style="display:none">
+          <td style="padding-left:28px;font-size:12px;color:var(--muted)">↳ ${bd.label}</td>
+          <td style="font-size:12px"><span class="provider-tag" style="background:${bdColor}22;color:${bdColor}">${bd.provider}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${bd.note}</td>
+          <td colspan="2"></td>
+        </tr>`;
+      });
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+function toggleBreakdown(idx) {
+  const rows = document.querySelectorAll('.bdr-' + idx);
+  const btn = document.getElementById('bdtoggle-' + idx);
+  const isOpen = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(r => r.style.display = isOpen ? 'none' : 'table-row');
+  if (btn) btn.textContent = isOpen ? '▶' : '▼';
+}
+
+function updateSkillsTotal() {
+  let total = 0;
+  allSkills.forEach((s, i) => {
+    const runs = parseFloat(document.getElementById('sRuns_' + i)?.value) || 0;
+    const mid = getSkillCostMid(s);
+    const line = runs * mid;
+    total += line;
+    const el = document.getElementById('sMonthly_' + i);
+    if (el) el.textContent = line > 0 ? '$' + line.toFixed(2) : '—';
+  });
+  document.getElementById('skillsGrandTotal').textContent = '$' + total.toFixed(2);
+}
+
+let skillSortDir = null; // null | 'asc' | 'desc'
+
+function cycleSortSkills() {
+  skillSortDir = skillSortDir === null ? 'asc' : skillSortDir === 'asc' ? 'desc' : 'asc';
+  const icon = document.getElementById('costSortIcon');
+  icon.textContent = skillSortDir === 'asc' ? '↑' : '↓';
+  icon.style.color = 'var(--accent)';
+
+  const tbody = document.getElementById('skillsTable');
+  // Sort only parent rows; breakdown rows follow their parent
+  const parentRows = Array.from(tbody.querySelectorAll('tr:not(.breakdown-row)'));
+  parentRows.sort((a, b) => {
+    const av = parseFloat(a.dataset.costMid) || 0;
+    const bv = parseFloat(b.dataset.costMid) || 0;
+    return skillSortDir === 'asc' ? av - bv : bv - av;
+  });
+  parentRows.forEach(row => {
+    tbody.appendChild(row);
+    const idx = row.dataset.idx;
+    if (idx !== undefined) {
+      tbody.querySelectorAll('.bdr-' + idx).forEach(br => tbody.appendChild(br));
+    }
+  });
+}
+
+function renderFilterBtns() {
+  const filters = ['all', 'ahrefs', 'apptweak', 'firecrawl', 'fal', 'deepgram'];
+  document.getElementById('filterBtns').innerHTML = filters.map(f => `
+    <button class="filter-btn ${f === 'all' ? 'active' : ''}" onclick="setFilter('${f}', this)">${f}</button>
+  `).join('');
+}
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  // First: parent rows
+  document.querySelectorAll('#skillsTable tr:not(.breakdown-row)').forEach(row => {
+    if (f === 'all') { row.style.display = ''; return; }
+    const providers = row.dataset.providers || '';
+    row.style.display = providers.includes(f) ? '' : 'none';
+  });
+  // Second: breakdown rows follow parent visibility + toggle state
+  document.querySelectorAll('#skillsTable tr.breakdown-row').forEach(row => {
+    const cls = Array.from(row.classList).find(c => c.startsWith('bdr-'));
+    if (!cls) return;
+    const idx = cls.replace('bdr-', '');
+    const parentRow = document.querySelector(`#skillsTable tr[data-idx="${idx}"]`);
+    const parentVisible = parentRow && parentRow.style.display !== 'none';
+    const toggleOpen = document.getElementById('bdtoggle-' + idx)?.textContent === '▼';
+    row.style.display = parentVisible && toggleOpen ? 'table-row' : 'none';
+  });
+}
+
+// ─── Refs table ───────────────────────────────────────────────────────────────
+
+function renderRefs() {
+  document.getElementById('refsTable').innerHTML = refs.map(r => `
+    <tr>
+      <td><b>${r.provider}</b></td>
+      <td><a href="${r.url}" target="_blank">${r.url}</a></td>
+      <td style="color:var(--muted);font-size:12px">${r.skills}</td>
+    </tr>
+  `).join('');
+}
+
+// ─── Ahrefs table ─────────────────────────────────────────────────────────────
+
+function renderAhrefsTable() {
+  const rate = getAhrefsRate();
+  document.getElementById('ahrefsTable').innerHTML = ahrefsSkills.map(s => `
+    <tr>
+      <td>${s.skill}</td>
+      <td class="endpoint-list">${s.endpoints.join('<br>')}</td>
+      <td class="cost-range">${s.unitsMin.toLocaleString()}–${s.unitsMax.toLocaleString()}</td>
+      <td class="cost-range" style="color:var(--ahrefs)">$${(s.unitsMin * rate).toFixed(2)}–$${(s.unitsMax * rate).toFixed(2)}</td>
+      <td class="cost-sub" style="max-width:260px">${s.note}</td>
+    </tr>
+  `).join('');
+}
+
+
+// ─── Charts ───────────────────────────────────────────────────────────────────
+
+function initCharts() {
+  Chart.defaults.color = '#7b82a0';
+  Chart.defaults.borderColor = '#2e3247';
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  Chart.defaults.font.size = 12;
+
+  // Overview: skill cost bar — grouped by skill, same color per group
+  new Chart(document.getElementById('chartSkillCost'), {
+    type: 'bar',
+    data: {
+      labels: [
+        'competitive-analysis (--scope all)',
+        'competitive-analysis (--scope google-ads)',
+        'competitive-analysis (--scope ads/meta)',
+        'ads-media-plan (Google research)',
+        'ads-media-plan (Meta / ads creative)',
+        'app-store-spy (health)',
+        'app-store-spy (keywords)',
+        'app-store-spy (reviews)',
+        'app-store-spy (chart)',
+        'video-creative-pipeline (Track A · Seedance)',
+        'video-creative-pipeline (Track B · Creatify)',
+        'ahrefs-keyword-discovery',
+      ],
+      datasets: [{
+        label: 'Est. USD / run',
+        // kw-spy revised: vol>200 + pos<=20 + limit=100 → 34u/row → ~$2.20 (both organic-kw calls)
+        // competitive-analysis --scope all:      find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74)+app-store($3.34) = $9.36
+        // competitive-analysis --scope google-ads: find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74) = $6.02
+        // competitive-analysis --scope ads/meta: find-comp($0.59)+Foreplay($0.30)+lp-spy($1.74)+direct($0.30) = $2.93
+        // ads-media-plan Google: direct($1.71)+find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74) = $7.73
+        // ads-media-plan Meta:   find-comp($0.59)+Foreplay($0.30)+lp-spy($1.74)+direct($0.50) = $3.13
+        // app-store-spy health: $3.34 · keywords: $1.59 · reviews: $0.48 · chart: $0.03
+        // video Track A: Seedance($3.03)+EL(~$0.03)+DG($0.03)+Ahrefs find-comp($0.59) = $3.68
+        // video Track B: Creatify 17cr($3.37)+DG($0.03)+Foreplay($0.30)+Ahrefs($0.59) = $4.29
+        // ahrefs-keyword-discovery: (3260+8850)/2 × $0.0006225 = $3.77
+        data: [9.4, 6.0, 2.9,  7.7, 3.1,  3.34, 1.59, 0.48, 0.03,  3.7, 4.3,  3.77],
+        backgroundColor: [
+          '#6c6ff5cc', '#6c6ff599', '#6c6ff555',
+          '#f59e0bcc', '#f59e0b66',
+          '#e91e8ccc', '#e91e8c99', '#e91e8c66', '#e91e8c33',
+          '#8b5cf6cc', '#8b5cf699',
+          '#ff8c00cc',
+        ],
+        borderColor: [
+          '#6c6ff5', '#6c6ff5', '#6c6ff5',
+          '#f59e0b', '#f59e0b',
+          '#e91e8c', '#e91e8c', '#e91e8c', '#e91e8c',
+          '#8b5cf6', '#8b5cf6',
+          '#ff8c00',
+        ],
+        borderWidth: 1, borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3247' }, ticks: { callback: v => '$' + v } },
+        y: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#c8ccd8' } }
+      }
+    }
+  });
+
+  // Overview: provider pie
+  new Chart(document.getElementById('chartProviderPie'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Ahrefs', 'AppTweak', 'fal.ai', 'Deepgram', 'Firecrawl', 'Other'],
+      datasets: [{ data: [55, 22, 12, 5, 4, 2], backgroundColor: ['#ff8c00cc', '#e91e8ccc', '#818cf8cc', '#06b6d4cc', '#22c55ecc', '#94a3b8cc'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'right' } } }
+  });
+
+  // AppTweak: breakdown chart (dynamic — updates on mode card click)
+  const firstMode = apptweakModes[0];
+  window.healthBreakdownChart = new Chart(document.getElementById('chartHealthBreakdown'), {
+    type: 'bar',
+    data: {
+      labels: firstMode.breakdown.labels,
+      datasets: [{
+        label: 'Credits',
+        data: firstMode.breakdown.data,
+        backgroundColor: '#e91e8c88', borderColor: '#e91e8c', borderWidth: 1, borderRadius: 4,
+      }]
+    },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#2e3247' } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } } }
+  });
+
+  // Ahrefs: units bar
+  new Chart(document.getElementById('chartAhrefsUnits'), {
+    type: 'bar',
+    data: {
+      labels: ahrefsSkills.map(s => s.skill.replace('ahrefs-', '').replace('-', '\n')),
+      datasets: [
+        { label: 'Min units', data: ahrefsSkills.map(s => s.unitsMin), backgroundColor: '#ff8c0033', borderColor: '#ff8c00', borderWidth: 1, borderRadius: 4 },
+        { label: 'Max units', data: ahrefsSkills.map(s => s.unitsMax), backgroundColor: '#ff8c0066', borderColor: '#ff8c00', borderWidth: 1, borderRadius: 4 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#2e3247' } } } }
+  });
+}
+
+// ─── AppTweak breakdown chart updater ────────────────────────────────────────
+
+function updateBreakdownChart(mode) {
+  const chart = window.healthBreakdownChart;
+  if (!chart) return;
+  chart.data.labels = mode.breakdown.labels;
+  chart.data.datasets[0].data = mode.breakdown.data;
+  chart.update();
+  document.getElementById('breakdownTitle').textContent = mode.name + ' — credit breakdown by step';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+renderModeCards();
+updateBudget();
+renderSkillsTable();
+renderFilterBtns();
+renderRefs();
+renderAhrefsTable();
+calcMedia();
+initCharts();
+</script>
+</body>
+</html>
