@@ -92,9 +92,9 @@ Reference: https://docs.ahrefs.com/docs/api/reference/introduction
 
 | Endpoint | Trigger | Calls/run | Cost |
 |----------|---------|-----------|------|
-| `/keywords-explorer/matching-terms` | Per seed keyword | N seeds (max 5) | ≥50 units/call |
-| `/keywords-explorer/related-terms` | Per seed keyword | N seeds (max 5) | ≥50 units/call |
-| `/keywords-explorer/search-suggestions` | Per seed keyword | N seeds (max 5) | ≥50 units/call |
+| `/keywords-explorer/matching-terms` | Per seed keyword | N seeds (max 3) | ≥50 units/call |
+| `/keywords-explorer/related-terms` | Per seed keyword | N seeds (max 3) | ≥50 units/call |
+| `/keywords-explorer/search-suggestions` | Per seed keyword | N seeds (max 3) | ≥50 units/call |
 | `/keywords-explorer/overview` | Bulk enrichment (≤1000 kw/call) | 1–2 | ≥50 units/call |
 | `/keywords-explorer/volume-history` | Top 5 keywords by volume | 5 | ≥50 units/call |
 
@@ -121,7 +121,7 @@ Abort rule: any single call > 500 units → abort immediately.
 | `/keywords-explorer/overview` | Budget forecast (top 10 gap kw) | 1 | ≥50 units/call |
 | `/serp-overview/serp-overview` | Head-to-head (top 20 paid gap kw) | ≤20 | ≥50 units/call |
 | `/batch-analysis` (POST) | Bulk domain metrics | 1 | ≥50 units/call |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | ~$0.002/task |
+| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | $0.0101/call |
 
 **organic_keywords** (competitor): `select=keyword,volume,cpc,difficulty,position,url,intents` → per_row_cost = 3×10u + 4×1u = **34u/row**. `where=[volume>200, position<=20]`, limit=100 → typically 30–80 rows → **1,020–2,720u/call**.
 Own domain: same select, no position cap, limit=100 → typically 40–100 rows → **1,360–3,400u/call**.
@@ -190,7 +190,7 @@ Typical total: **550–2,200 units/run** ($0.34–$1.37) — overview call domin
 |----------|---------|-----------|------|
 | `/serp-overview/serp-overview` | Per keyword | N keywords | ≥50 units/call |
 | `/keywords-explorer/overview` | Batch enrichment (≤100 kw/call) | 1 | ≥50 units/call |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid slots | 1 per zero-result keyword | ~$0.002/task |
+| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid slots | 1 per zero-result keyword | $0.0101/call |
 
 Typical total: **500–4,300 units/run** ($0.31–$2.68) — overview call at 43u/row × 100 rows = 4,300 units
 
@@ -203,7 +203,7 @@ Typical total: **500–4,300 units/run** ($0.31–$2.68) — overview call at 43
 | `/keywords-explorer/overview` | Batch keyword enrichment (≤100 kw/call) | 1–2 | ≥50 units/call |
 | Firecrawl `/v1/scrape` | Tier A: unknown-type pages; Tier B: top 3 by traffic | 1–10 per competitor | ~$0.002/page |
 | Google PageSpeed `/runPagespeed` | Tier B only | 1–3 per competitor | **Free** |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | ~$0.002/task |
+| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | $0.0101/call |
 
 Typical total: **600–5,000 Ahrefs units ($0.37–$3.11) + 3–10 Firecrawl scrapes (~$0.006–$0.02)** — high end driven by paid-pages (per_row_cost = 32 × 100 rows = 3,200 units) + kw overview (43u × 100 rows = 4,300 units, 1–2 calls)
 
