@@ -258,6 +258,20 @@ Typical total: **200–600 units/run** (management calls are free)
 
 ---
 
+### geo-analysis
+
+Orchestration skill — calls `/mention-tracker --channels ai` (2–3 invocations: own domain baseline + deep audit + per-competitor). No direct Ahrefs endpoint calls.
+
+| Sub-skill | Trigger | Calls/run | Cost |
+|-----------|---------|-----------|------|
+| `/mention-tracker` (own domain, standard) | Step 1 baseline | 1 | ~$0.06 |
+| `/mention-tracker` (own domain, deep) | Step 2 deep audit | 1 | ~$0.12 |
+| `/mention-tracker` (per competitor, deep) | Step 3 (2–3 competitors) | 2–3 | ~$0.12 each |
+
+Typical total: **~190–600 units/run** ($0.12–$0.37) — driven by number of competitors and Brand Radar data sources.
+
+---
+
 ### competitive-analysis
 
 Orchestration skill — cost = sum of sub-skills invoked per scope.
