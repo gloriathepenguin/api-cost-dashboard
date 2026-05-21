@@ -33,7 +33,7 @@ Maintained as the single source of truth for cost estimation and budget planning
 | ElevenLabs | Pay-as-you-go | Usage-based | — | ~$0.30/1K chars (TBC) |
 | Firecrawl | Starter | Usage-based | — | ~$0.002/page |
 | ScreenshotOne | Pay-as-you-go | Usage-based | — | ~$0.003/screenshot |
-| DataForSEO | Pay-as-you-go | Usage-based | — | ~$0.002/task |
+| DataForSEO | Pay-as-you-go | Usage-based | — | Labs: $0.01/task + $0.0001/item · SERP Live: $0.002/query |
 | fal.ai | Pay-as-you-go | Usage-based | — | $0.30/s std · $0.24/s fast (Seedance) |
 
 **Total fixed subscriptions: $646/mo** (AppTweak + Ahrefs + Foreplay + Creatify)
@@ -407,6 +407,26 @@ Typical: 5-min video = 5 min × $0.0059 = **~$0.030**
 
 ---
 
+## DataForSEO (Cross-validation only)
+
+**Usage pattern**: DataForSEO is **not** a primary data source in any skill. It fires only as a cross-validation fallback when Ahrefs returns 0 paid activity for a competitor — to verify whether the zero is real or a coverage gap.
+
+**Auth**: `Authorization: Basic base64(LOGIN:PASSWORD)` — requires `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` env vars. If not set, cross-validation is silently skipped.
+
+**Billing model**: pay-as-you-go, per task + per item returned.
+
+| Endpoint | Path | Trigger | Used by | Cost |
+|----------|------|---------|---------|------|
+| `domain_rank_overview` | `POST /v3/dataforseo_labs/google/domain_rank_overview/live` | Ahrefs returns 0 paid pages/keywords for a competitor | landing-page-spy, serp-ads-monitor, competitive-analysis | $0.01/task + $0.0001/item → **~$0.0101/call** (1 domain per call) |
+
+**Pricing source**: Falls under DataForSEO Labs "All Other Endpoints" tier — $0.01/task + $0.0001/item. `include_clickstream_data=true` doubles cost (we don't use it).
+
+**Typical cost**: 0–3 calls/run (only fires for zero-result competitors) → **$0–$0.03** — effectively negligible. Most runs will not call DataForSEO at all.
+
+**Output used**: `tasks[0].result[0].metrics.paid.keywords` + `metrics.paid.traffic` — presented side-by-side with Ahrefs result. "No paid activity" conclusion only when **both sources confirm zero**.
+
+---
+
 ## Free APIs (no cost)
 
 | API | Used by | Notes |
@@ -435,4 +455,4 @@ Typical: 5-min video = 5 min × $0.0059 = **~$0.030**
 | Gemini 3.1 Flash Image | image (1024×1024) | **$0.067/image** ($60/1M output tokens · 1,120 tokens/img; text input $0.25/1M tokens negligible) |
 | fal.ai Seedance 2.0 | second of video (720p) | $0.30/s std · $0.24/s fast | 10s clip ≈ $3.03 std / $2.42 fast; image-to-video ×0.6 discount |
 | Google PageSpeed | — | Free | No charge |
-| DataForSEO | task | ~$0.002 | Standard SERP tasks · pay-as-you-go |
+| DataForSEO | task + items | $0.01/task + $0.0001/item (Labs endpoints) · $0.002/query (SERP Live) | `domain_rank_overview/live`: $0.01 + $0.0001 = **$0.0101/call** (1 domain). SERP Live: $0.002/query. Labs "All Other Endpoints" tier. |
