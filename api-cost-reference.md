@@ -14,10 +14,21 @@ Maintained as the single source of truth for cost estimation and budget planning
 **Plan**: Standard · $249/mo · 400,000 units/mo → **$0.0006225 / unit**
 **Billing docs**: https://docs.ahrefs.com/en/api/docs/limits-consumption
 
-**Billing model**: units consumed per call = `max(50, per_row_cost × num_rows)`
-- `per_row_cost` = sum of unit weights for each field in `select` + `where` + `order_by`
+#### Unit Cost Model
+
+```
+units_per_call = max(50, per_row_cost × num_rows)
+per_row_cost   = Σ weight(field)  for each field in select + where + order_by
+```
+
+- Floor of **50 units** applies to every call — even a 1-row response costs at least 50 units
 - Cached responses consume **0 units**
 - Actual units charged: read `x-api-units-cost-total-actual` response header
+
+**Cost drivers** (in order of impact):
+1. **10-unit fields** in `select` — each one multiplies cost by up to 10×
+2. **Row count** — the single biggest lever; halving rows halves cost
+3. **Number of calls** — reduce by batching keywords into single overview calls
 
 **Field weights:**
 
@@ -96,8 +107,24 @@ All Ahrefs endpoints used across skills, with actual per-call cost based on the 
 ### AppTweak
 
 **Plan**: Small · $199/mo · 250,000 credits/mo → **$0.000796 / credit**
-**Billing model**: credits charged per response row or per result set. Failed requests do NOT consume credits.
 **Docs**: https://developers.apptweak.com/reference/overview
+
+#### Unit Cost Model
+
+Credits are charged per API response — cost is driven by the combination of **apps × markets × days × metrics**, not by field selection. Failed requests do NOT consume credits.
+
+```
+credits = base_cr_per_unit × apps × markets           (current endpoints)
+credits = base_cr_per_unit × apps × markets × days    (history endpoints)
+credits = ~50 × ceil(keywords / 5) × apps             (keyword metric endpoints)
+```
+
+**Cost drivers** (in order of impact):
+1. `/apps/metrics/current` + `/apps/metrics/history` — **~516 cr/app** each, dominates health mode
+2. `/apps/keywords/bids.json` — **~1,095 cr/app** (`--probe-paid` only) ⚠️
+3. Number of markets — linear multiplier on ranking/review endpoints
+4. History date range (days) — linear multiplier on `*_history` endpoints
+5. Number of keywords — scales keyword_metrics calls (batched per 5 kw)
 
 | Endpoint | Credits/call | USD/call | Notes |
 |----------|-------------|----------|-------|
@@ -126,8 +153,20 @@ All Ahrefs endpoints used across skills, with actual per-call cost based on the 
 ### Foreplay
 
 **Plan**: Pro · $99/mo · 100,000 credits/mo → **$0.00099 / credit**
-**Billing model**: 1 credit per ad returned. Failed requests do NOT consume credits.
 **Docs**: https://foreplay.co/api
+
+#### Unit Cost Model
+
+```
+credits = ads_returned   (capped by request limit)
+```
+
+Failed requests do NOT consume credits.
+
+**Cost drivers:**
+1. **Ads per competitor** — default limit=50 → 50 cr/call; raising limit increases cost linearly
+2. **Number of competitors** — each brand lookup is a separate call
+3. Discovery search — optional extra call per competitor (+50 cr)
 
 | Endpoint | Credits/call | USD/call | Notes |
 |----------|-------------|----------|-------|
@@ -140,8 +179,27 @@ All Ahrefs endpoints used across skills, with actual per-call cost based on the 
 ### Creatify
 
 **Plan**: Starter · $99/mo · 500 credits/mo → **$0.198 / credit**
-**Billing model**: credits charged per second of generated video / per request.
 **Docs**: https://docs.creatify.ai/api-reference/introduction
+
+#### Unit Cost Model
+
+```
+credits (video)  = ceil(duration_seconds) × rate_per_second
+credits (script) = 1 per request
+credits (TTS)    = ceil(duration_seconds / 30)
+```
+
+| Operation | Formula | Rate | 10s example |
+|-----------|---------|------|-------------|
+| Avatar / Lipsync (Aurora) | `ceil(s) × 1` | 1 cr/s | 10 cr = $1.98 |
+| Avatar / Lipsync (Fast) | `ceil(s) × 0.5` | 0.5 cr/s | 5 cr = $0.99 |
+| Script generation | `1` | 1 cr/req | $0.198 |
+| TTS audio | `ceil(s / 30)` | 1 cr/30s | 1 cr = $0.198 |
+
+**Cost drivers:**
+1. **Video duration** — dominates; avatar + lipsync each charge per second
+2. **Quality tier** — Aurora (1 cr/s) vs Fast (0.5 cr/s) = 2× cost difference
+3. Polling calls are free
 
 | Endpoint | Credits/call | USD/call | Notes |
 |----------|-------------|----------|-------|
@@ -158,9 +216,25 @@ A 10-second Track B video (Aurora): avatar 10s + lipsync 10s + script + TTS ≈ 
 ### DataForSEO
 
 **Plan**: Pay-as-you-go
-**Billing model**: $0.01/task + $0.0001/item returned (Labs endpoints). `include_clickstream_data=true` doubles cost — not used.
 **Auth**: `Authorization: Basic base64(LOGIN:PASSWORD)` · env vars: `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD`
 **Docs**: https://docs.dataforseo.com/v3/
+
+#### Unit Cost Model
+
+```
+cost_per_call = $0.01 (task fee) + items_returned × $0.0001
+```
+
+| Tier | Endpoints | Task fee | Item fee |
+|------|-----------|---------|---------|
+| Labs "All Other Endpoints" | `domain_rank_overview`, most Labs endpoints | $0.01 | $0.0001 |
+| SERP Live | `/v3/serp/google/*/live` | $0.002 | — |
+
+**Cost drivers:**
+1. **Task fee** dominates at low item counts — $0.01 is the floor per call
+2. **Items returned** — for `domain_rank_overview` with 1 domain, items=1 → total $0.0101/call
+3. `include_clickstream_data=true` doubles cost — **not used** in any skill
+4. Most runs = 0 calls (only fires as Ahrefs fallback for zero-result competitors)
 
 | Endpoint | Path | Credits/call | USD/call | Notes |
 |----------|------|-------------|----------|-------|
@@ -174,6 +248,24 @@ A 10-second Track B video (Aurora): avatar 10s + lipsync 10s + script + TTS ≈ 
 
 **Plan**: Pay-as-you-go
 **Docs**: https://fal.ai/docs
+
+#### Unit Cost Model
+
+```
+cost = duration_seconds × rate_per_second
+```
+
+| Quality | Rate | 10s | 30s |
+|---------|------|-----|-----|
+| 720p Standard (text-to-video) | $0.30/s | $3.00 | $9.00 |
+| 720p Fast (text-to-video) | $0.24/s | $2.40 | $7.20 |
+| Image-to-video (any quality) | ×0.6 on above | $1.80 / $1.44 | $5.40 / $4.32 |
+
+**Cost drivers:**
+1. **Output duration** — the only variable; billed to the second
+2. **Quality tier** — Standard vs Fast = 1.25× cost
+3. **Input type** — image-to-video = 40% cheaper than text-to-video
+4. Status polling calls are free
 
 | Model / Endpoint | Rate | Notes |
 |-----------------|------|-------|
@@ -189,6 +281,25 @@ A 10-second Track B video (Aurora): avatar 10s + lipsync 10s + script + TTS ≈ 
 **Plan**: Pay-as-you-go · Nova-2 model
 **Docs**: https://developers.deepgram.com/reference/deepgram-api-overview
 
+#### Unit Cost Model
+
+```
+cost = ceil(duration_seconds / 15) × 15 / 60 × $0.0059
+```
+
+Billing rounds up to the nearest **15-second** interval.
+
+| Duration | Cost |
+|----------|------|
+| 1–15s | $0.0015 |
+| 1 min | $0.0059 |
+| 5 min | $0.0295 |
+| 60 min | $0.354 |
+
+**Cost drivers:**
+1. **Audio duration** — the only variable
+2. Model tier — Nova-2 ($0.0059/min) is the model we use; Nova-3 would be higher
+
 | Endpoint | Rate | Notes |
 |----------|------|-------|
 | `POST /v1/listen` (Nova-2) | **$0.0059/min** ($0.35/hr) | Pre-recorded audio transcription |
@@ -202,6 +313,22 @@ Typical: 5-min video = **~$0.030**
 **Plan**: Pay-as-you-go
 **Docs**: https://elevenlabs.io/docs/api-reference/introduction
 
+#### Unit Cost Model
+
+```
+cost = character_count / 1000 × rate_per_1K_chars
+```
+
+**Cost drivers:**
+1. **Text length** — the only variable; ~1 word ≈ 5 chars
+2. Voice model — Turbo (cheaper) vs Multilingual v2; rate TBC
+
+| Text length | ~Characters | ~Cost (@ $0.30/1K, TBC) |
+|-------------|-------------|--------------------------|
+| 100-word script | ~600 chars | ~$0.18 |
+| 250-word script | ~1,500 chars | ~$0.45 |
+| 500-word script | ~3,000 chars | ~$0.90 |
+
 | Endpoint | Rate | Notes |
 |----------|------|-------|
 | `POST /v1/text-to-speech/{voice_id}` | **~$0.30/1K chars** (TBC) | Exact PAYG rate to be confirmed |
@@ -213,6 +340,17 @@ Typical: 5-min video = **~$0.030**
 **Plan**: Starter · usage-based → **~$0.002 / page scrape**
 **Docs**: https://docs.firecrawl.dev/api-reference/v2-introduction
 
+#### Unit Cost Model
+
+```
+cost = pages_scraped × $0.002
+```
+
+**Cost drivers:**
+1. **Number of pages** — the only variable; each URL = 1 page = $0.002
+2. Tier mode — Tier B (deep audit, top 3 pages) = predictable; Tier A (unknown-type pages) = variable
+3. Failed / timeout scrapes are not charged
+
 | Endpoint | Rate | Notes |
 |----------|------|-------|
 | `POST /v1/scrape` | **$0.002/page** | Used for competitor page scraping |
@@ -223,6 +361,16 @@ Typical: 5-min video = **~$0.030**
 
 **Plan**: Pay-as-you-go → **~$0.003 / screenshot**
 **Docs**: https://screenshotone.com/docs/getting-started/
+
+#### Unit Cost Model
+
+```
+cost = screenshots_taken × $0.003
+```
+
+**Cost drivers:**
+1. **Number of screenshots** — the only variable; typically 1–3 per run
+2. Each unique URL = 1 screenshot = $0.003
 
 | Endpoint | Rate | Notes |
 |----------|------|-------|
