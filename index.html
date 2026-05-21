@@ -653,16 +653,16 @@ const allSkills = [
       { label: 'find-competitors', note: '~$0.59', provider: 'Ahrefs' },
       { label: 'geo-analysis',     note: '~$0.25', provider: 'Ahrefs' },
     ]},
-  { skill: 'competitive-analysis (--scope all)',        providers: ['Ahrefs', 'Foreplay', 'Gemini', 'Firecrawl', 'AppTweak'], costLow: 8.00, costHigh: 11.00, costNote: 'all 3 scopes in parallel',
+  { skill: 'competitive-analysis (--scope all)',        providers: ['Ahrefs', 'Foreplay', 'Gemini', 'Firecrawl'], costLow: 5.50, costHigh: 8.00, costNote: 'all 3 scopes in parallel (app client adds ~$1.50 AppTweak)',
     breakdown: [
       { label: 'find-competitors (shared)',    note: '~$0.59', provider: 'Ahrefs' },
       { label: 'keyword-spy',                  note: '~$2.20', provider: 'Ahrefs' },
       { label: 'serp-ads-monitor',             note: '~$1.49', provider: 'Ahrefs' },
       { label: 'landing-page-spy (shared)',    note: '~$1.74', provider: 'Ahrefs + Firecrawl' },
       { label: 'ad-creative-spy',              note: '~$0.30', provider: 'Foreplay' },
-      { label: 'app-store-spy (health)',        note: '~$3.34', provider: 'AppTweak' },
       { label: 'geo-analysis',                 note: '~$0.25', provider: 'Ahrefs' },
       { label: 'generate-ad-creative (hero)',  note: '~$0.07', provider: 'Gemini' },
+      { label: 'AppTweak (app clients only)',  note: '~$1.50 · Step 2-pre 4 endpoints', provider: 'AppTweak' },
     ]},
   { skill: 'geo-analysis',                              providers: ['Ahrefs'],                                             costLow: 0.12, costHigh: 0.37, costNote: 'Brand Radar endpoints (≈mention-tracker)' },
   // ── Atomic skills ─────────────────────────────────────────────────────────
@@ -1005,7 +1005,7 @@ function initCharts() {
       datasets: [{
         label: 'Est. USD / run',
         // kw-spy revised: vol>200 + pos<=20 + limit=100 → 34u/row → ~$2.20 (both organic-kw calls)
-        // competitive-analysis --scope all:      find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74)+app-store($3.34) = $9.36
+        // competitive-analysis --scope all: find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74)+ad-creative-spy($0.30)+geo($0.25)+gemini($0.07) = $6.64
         // competitive-analysis --scope google-ads: find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74) = $6.02
         // competitive-analysis --scope ads/meta: find-comp($0.59)+Foreplay($0.30)+lp-spy($1.74)+direct($0.30) = $2.93
         // ads-media-plan Google: direct($1.71)+find-comp($0.59)+kw-spy($2.20)+serp($1.49)+lp-spy($1.74) = $7.73
@@ -1014,7 +1014,7 @@ function initCharts() {
         // video Track A: Seedance($3.03)+EL(~$0.03)+DG($0.03)+Ahrefs find-comp($0.59) = $3.68
         // video Track B: Creatify 17cr($3.37)+DG($0.03)+Foreplay($0.30)+Ahrefs($0.59) = $4.29
         // ahrefs-keyword-discovery: (3260+8850)/2 × $0.0006225 = $3.77
-        data: [9.4, 6.0, 2.9,  7.7, 3.1,  3.34, 1.59, 0.48, 0.03,  3.7, 4.3,  3.77],
+        data: [6.6, 6.0, 2.9,  7.7, 3.1,  3.34, 1.59, 0.48, 0.03,  3.7, 4.3,  3.77],
         backgroundColor: [
           '#6c6ff5cc', '#6c6ff599', '#6c6ff555',
           '#f59e0bcc', '#f59e0b66',
