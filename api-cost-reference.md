@@ -3,449 +3,506 @@
 Third-party API calls across all brand-template skills.
 Maintained as the single source of truth for cost estimation and budget planning.
 
-## Official API References
-
-| Provider | Docs URL |
-|----------|----------|
-| Ahrefs | https://docs.ahrefs.com/docs/api/reference/introduction |
-| AppTweak | https://developers.apptweak.com/reference/overview |
-| Firecrawl | https://docs.firecrawl.dev/api-reference/v2-introduction |
-| DataForSEO | https://docs.dataforseo.com/v3/ |
-| Deepgram | https://developers.deepgram.com/reference/deepgram-api-overview |
-| ElevenLabs | https://elevenlabs.io/docs/api-reference/introduction |
-| ScreenshotOne | https://screenshotone.com/docs/getting-started/ |
-| fal.ai (Seedance 2.0) | https://fal.ai/docs |
-| Creatify | https://docs.creatify.ai/api-reference/introduction |
-| Foreplay | https://foreplay.co/api |
-| Google PageSpeed | https://developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed |
+**Total fixed subscriptions: $646/mo** (AppTweak $199 + Ahrefs $249 + Foreplay $99 + Creatify $99)
 
 ---
 
-## Subscription Plans
+## API Billing Policies
 
-| Provider | Plan | Monthly cost | Quota | Unit rate |
-|----------|------|-------------|-------|-----------|
-| AppTweak | Small | $199/mo | 250,000 credits | $0.000796/cr |
-| Ahrefs | Standard | $249/mo | 400,000 units | $0.0006225/unit |
-| Foreplay | Pro | $99/mo | 100,000 credits | $0.00099/cr |
-| Creatify | Starter | $99/mo | 500 credits | $0.198/cr |
-| Deepgram | Pay-as-you-go | Usage-based | — | $0.0059/min (Nova-2) |
-| ElevenLabs | Pay-as-you-go | Usage-based | — | ~$0.30/1K chars (TBC) |
-| Firecrawl | Starter | Usage-based | — | ~$0.002/page |
-| ScreenshotOne | Pay-as-you-go | Usage-based | — | ~$0.003/screenshot |
-| DataForSEO | Pay-as-you-go | Usage-based | — | Labs: $0.01/task + $0.0001/item · SERP Live: $0.002/query |
-| fal.ai | Pay-as-you-go | Usage-based | — | $0.30/s std · $0.24/s fast (Seedance) |
+### Ahrefs
 
-**Total fixed subscriptions: $646/mo** (AppTweak + Ahrefs + Foreplay + Creatify)
-
----
-
-## Ahrefs Unit Cost Model
-
-**Plan**: $249/mo · 400,000 units/mo → **$0.0006225 / unit**
+**Plan**: Standard · $249/mo · 400,000 units/mo → **$0.0006225 / unit**
 **Billing docs**: https://docs.ahrefs.com/en/api/docs/limits-consumption
 
-### Formula
-```
-cost_per_call = max(50,  per_row_cost × num_rows)
-per_row_cost  = sum of unit cost for each unique field in select + where + order_by
-```
-Cached responses consume **0 units**. Response headers: `x-api-units-cost-total-actual` = actual units charged.
+**Billing model**: units consumed per call = `max(50, per_row_cost × num_rows)`
+- `per_row_cost` = sum of unit weights for each field in `select` + `where` + `order_by`
+- Cached responses consume **0 units**
+- Actual units charged: read `x-api-units-cost-total-actual` response header
 
-### Field unit costs
+**Field weights:**
 
-| Cost | Fields |
-|------|--------|
-| **10 units** | `volume`, `difficulty`, `traffic`, `traffic_potential`, `intents`, `global_volume`, `parent_volume`, `volume_monthly`, `volume_monthly_history`, `sum_traffic`, `sum_paid_traffic`, `keyword_difficulty` (and their `_prev` / `_merged` variants) |
+| Weight | Fields |
+|--------|--------|
+| **10 units** | `volume`, `difficulty`, `traffic`, `traffic_potential`, `intents`, `global_volume`, `parent_volume`, `volume_monthly`, `volume_monthly_history`, `sum_traffic`, `sum_paid_traffic`, `keyword_difficulty` (and `_prev` / `_merged` variants) |
 | **5 units** | `all_positions`, `all_positions_prev` |
-| **1 unit** | everything else: `keyword`, `cpc`, `position`, `url`, `title`, `parent_topic`, `serp_features`, `first_seen`, etc. |
+| **1 unit** | `keyword`, `cpc`, `position`, `url`, `title`, `parent_topic`, `serp_features`, `first_seen`, and all other fields |
 
-### Cost examples
+**Key insight**: removing 10-unit fields from `select` and capping `rows` are the two biggest cost levers.
 
-| Scenario | Fields (per_row_cost) | Rows | Units | USD |
-|----------|-----------------------|------|-------|-----|
-| Expansion call (`select=keyword`) | 1 | 30 | **50** (min) | $0.03 |
-| KW overview, 100 kw, typical select | 43 (7 fields incl. 4×10u) | 100 | **4,300** | $2.68 |
-| KW overview, 500 kw, typical select | 43 | 500 | **21,500** | $13.40 |
-| Organic keywords, 1,000 rows | 32 (volume+traffic+difficulty = 30u + 2×1u) | 1,000 | **32,000** | $19.94 |
-| Domain rating only | 2 | 1 | **50** (min) | $0.03 |
+#### Endpoint Cost Directory
 
-**Key insight**: limiting `rows` and removing 10-unit fields from `select` is the single biggest cost lever.
+All Ahrefs endpoints used across skills, with actual per-call cost based on the `select` fields we use.
 
-### Free endpoints (0 units)
-Management, Rank Tracker overview, Web Analytics, GSC Insights, Social Media, Public, Subscription Info.
+**Keywords Explorer**
+
+| Endpoint | Our select fields | per_row_cost | Typical rows | Units/call | USD/call |
+|----------|-------------------|-------------|--------------|------------|----------|
+| `/keywords-explorer/matching-terms` | `keyword` only (expansion) | 1 | 30 | **50** (min) | $0.03 |
+| `/keywords-explorer/related-terms` | `keyword` only (expansion) | 1 | 30 | **50** (min) | $0.03 |
+| `/keywords-explorer/search-suggestions` | `keyword` only (expansion) | 1 | 30 | **50** (min) | $0.03 |
+| `/keywords-explorer/overview` | `keyword,volume,difficulty,cpc,intents,traffic_potential,parent_topic` | 43 (4×10u + 3×1u) | 50–180 | 2,150–7,740 | $1.34–$4.82 |
+| `/keywords-explorer/volume-history` | `keyword,volume_monthly_history` | 11 | 1 per kw | **50** (min) | $0.03 |
+| `/keywords-explorer/volume-by-country` | `keyword,volume` | 11 | 1 per kw | **50** (min) | $0.03 |
+
+**Site Explorer**
+
+| Endpoint | Our select fields | per_row_cost | Typical rows | Units/call | USD/call |
+|----------|-------------------|-------------|--------------|------------|----------|
+| `/site-explorer/organic-keywords` | `keyword,volume,cpc,difficulty,position,url,intents` | 34 (3×10u + 4×1u) | 30–100 | 1,020–3,400 | $0.64–$2.12 |
+| `/site-explorer/paid-pages` | `url,traffic,cpc,keywords,top_keyword` | 32 (2×10u + 3×1u) | 20–100 | 640–3,200 | $0.40–$1.99 |
+| `/site-explorer/keywords-history` | same as organic-keywords | 34 | 30–100 | 1,020–3,400 | $0.64–$2.12 |
+| `/site-explorer/top-pages` | `url,traffic,value,keywords` | ~22 (2×10u + 2×1u) | 10–50 | 220–1,100 | $0.14–$0.69 |
+| `/site-explorer/organic-competitors` | `competitor,common_keywords,competition_level` | ~3 | 10–20 | **50** (min) | $0.03 |
+| `/site-explorer/metrics` | `domain_rating,ahrefs_rank,org_keywords,org_traffic` | ~22 | 1 | **50** (min) | $0.03 |
+| `/site-explorer/domain-rating` | `domain_rating,ahrefs_rank` | 2 | 1 | **50** (min) | $0.03 |
+| `/site-explorer/backlinks-stats` | `live,all_time,new_lost_links` | ~3 | 1 | **50** (min) | $0.03 |
+| `/site-explorer/refdomains` | `domain,domain_rating,linked_domains,dofollow` | ~4 | 50–200 | **50**–800 | $0.03–$0.50 |
+| `/site-explorer/refdomains-history` | `date,refdomains` | 2 | 30–365 | **60**–730 | $0.04–$0.45 |
+| `/site-explorer/anchors` | `anchor,backlinks,dofollow,referring_domains` | ~4 | 20–100 | **80**–400 | $0.05–$0.25 |
+| `/site-explorer/domain-rating-history` | `date,domain_rating` | 2 | 30–365 | **60**–730 | $0.04–$0.45 |
+| `/site-explorer/broken-backlinks` | `url_from,url_to,ahrefs_rank` | ~3 | 10–50 | **50** (min) | $0.03 |
+| `/batch-analysis` (POST) | `domain_rating,org_keywords,org_traffic` | ~22 | 1 per domain | **50** (min) | $0.03 |
+
+**SERP Overview**
+
+| Endpoint | Our select fields | per_row_cost | Typical rows | Units/call | USD/call |
+|----------|-------------------|-------------|--------------|------------|----------|
+| `/serp-overview/serp-overview` | `position,url,domain,traffic` | ~12 (1×10u + 2×1u) | 10 | **50** (min) per keyword | $0.03 |
+
+**Site Audit**
+
+| Endpoint | Notes | Units/call | USD/call |
+|----------|-------|------------|----------|
+| `/site-audit/projects` | Resolve project_id | 0 | **Free** |
+| `/site-audit/issues` | Fixed cost | **50** | $0.03 |
+| `/site-audit/page-explorer` | Fixed cost | **50** | $0.03 |
+
+**Brand Radar**
+
+| Endpoint | Notes | Units/call | USD/call |
+|----------|-------|------------|----------|
+| All `/management/brand-radar-*` | Create / list / update reports and prompts | 0 | **Free** |
+| `/brand-radar/mentions-overview` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/mentions-history` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/sov-overview` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/sov-history` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/impressions-overview` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/ai-responses` | Per `data_source` (chatgpt / perplexity / google_ai / gemini) | **50** (min) each | $0.03 each |
+| `/brand-radar/cited-pages` | Per domain | **50** (min) | $0.03 |
+| `/brand-radar/cited-domains` | Per domain | **50** (min) | $0.03 |
 
 ---
 
-## Ahrefs Skills
+### AppTweak
+
+**Plan**: Small · $199/mo · 250,000 credits/mo → **$0.000796 / credit**
+**Billing model**: credits charged per response row or per result set. Failed requests do NOT consume credits.
+**Docs**: https://developers.apptweak.com/reference/overview
+
+| Endpoint | Credits/call | USD/call | Notes |
+|----------|-------------|----------|-------|
+| `/usage/credits` | 0 | **Free** | Pre-flight + post-run check |
+| `/apps/category-rankings/current.json` | ~11/app | ~$0.009 | Market scan; 24 calls for full scan |
+| `/apps/metadata.json` | ~11 | ~$0.009 | App metadata |
+| `/apps/metadata/changes.json` | ~41 (30d) | ~$0.033 | Metadata change history |
+| `/apps/category-rankings/history.json` | ~40 (30d, 1 app) | ~$0.032 | Ranking history per market |
+| `/apps/reviews/stats.json` | ~39–196 (30d, 1–5 apps) | ~$0.031–$0.156 | Review stats |
+| `/apps/reviews/top-displayed.json` | ~101/call (limit=100) | ~$0.080 | Top reviews; called ×2 sorts |
+| `/apps/metrics/current.json` | ~516 (4 metrics, 1 app) | **~$0.411** | Downloads/revenue — most expensive routine call |
+| `/apps/metrics/history.json` | ~516 (30d, 1 app) | **~$0.411** | 30-day metrics history |
+| `/keywords/suggestions/app.json` | ~51 | ~$0.041 | App keyword suggestions |
+| `/keywords/metrics/current.json` | ~251/call (5kw × 6metrics) | ~$0.200 | Batches of 5 keywords |
+| `/apps/keywords-rankings/current.json` | 251–751 | $0.200–$0.598 | Keyword rankings per app |
+| `/keywords/suggestions/category.json` | ~501 | ~$0.399 | Category keyword suggestions |
+| `/charts/top-results/current.json` | ~11/market | ~$0.009 | Chart rankings |
+| `/charts/top-results/history.json` | varies | varies | Optional; chart history |
+| `/apps/reviews/search.json` | ~101/call | ~$0.080 | Reviews search per term |
+| `/apps/reviews/top-displayed.json` (sort=most_useful) | ~101/call | ~$0.080 | UGC hooks (optional step 12b) |
+| `/apps/keywords/bids.json` | ~1,095/app | **~$0.871** ⚠️ | `--probe-paid` only |
+| `/keywords/apps/bids.json` (SOV) | ~121 (5kw/30d) | ~$0.096 | `--probe-paid` only |
+
+---
+
+### Foreplay
+
+**Plan**: Pro · $99/mo · 100,000 credits/mo → **$0.00099 / credit**
+**Billing model**: 1 credit per ad returned. Failed requests do NOT consume credits.
+**Docs**: https://foreplay.co/api
+
+| Endpoint | Credits/call | USD/call | Notes |
+|----------|-------------|----------|-------|
+| `GET /v2/brands/domain` | 0 | **Free** | Brand lookup by domain |
+| `GET /v2/brands/{id}/ads` | ~50 cr (limit=50 ads) | ~$0.050 | Ad library pull per competitor |
+| `POST /v2/search/ads` | ~50 cr (limit=50 ads) | ~$0.050 | Discovery search |
+
+---
+
+### Creatify
+
+**Plan**: Starter · $99/mo · 500 credits/mo → **$0.198 / credit**
+**Billing model**: credits charged per second of generated video / per request.
+**Docs**: https://docs.creatify.ai/api-reference/introduction
+
+| Endpoint | Credits/call | USD/call | Notes |
+|----------|-------------|----------|-------|
+| `POST /personal_photo_avatar/` | 1 cr/s (Aurora) · 0.5 cr/s (Fast) | $0.198/s · $0.099/s | Avatar video generation |
+| `POST /ai_scripts/` | 1 cr/request | $0.198 | Script generation |
+| `POST /text_to_speech/` | 1 cr/30s | $0.198/30s | TTS audio |
+| `POST /lipsyncs/` | 1 cr/s (Aurora) · 0.5 cr/s (Fast) | $0.198/s · $0.099/s | Lip-sync generation |
+| `GET /lipsyncs/{task_id}/` | 0 | **Free** | Status polling |
+
+A 10-second Track B video (Aurora): avatar 10s + lipsync 10s + script + TTS ≈ **~21 cr / ~$4.20**
+
+---
+
+### DataForSEO
+
+**Plan**: Pay-as-you-go
+**Billing model**: $0.01/task + $0.0001/item returned (Labs endpoints). `include_clickstream_data=true` doubles cost — not used.
+**Auth**: `Authorization: Basic base64(LOGIN:PASSWORD)` · env vars: `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD`
+**Docs**: https://docs.dataforseo.com/v3/
+
+| Endpoint | Path | Credits/call | USD/call | Notes |
+|----------|------|-------------|----------|-------|
+| `domain_rank_overview` | `POST /v3/dataforseo_labs/google/domain_rank_overview/live` | $0.01/task + $0.0001/item | **$0.0101/call** | 1 domain per call; Labs "All Other Endpoints" tier |
+
+**Usage pattern**: cross-validation fallback only — fires when Ahrefs returns 0 paid activity for a competitor. If env vars not set, silently skipped.
+
+---
+
+### fal.ai
+
+**Plan**: Pay-as-you-go
+**Docs**: https://fal.ai/docs
+
+| Model / Endpoint | Rate | Notes |
+|-----------------|------|-------|
+| Seedance 2.0 text-to-video (720p std) | **$0.30/s** | 10s clip ≈ $3.00 |
+| Seedance 2.0 text-to-video (720p fast) | **$0.24/s** | 10s clip ≈ $2.40 |
+| Seedance 2.0 image-to-video | ×0.6 discount | 10s ≈ $1.80 std / $1.44 fast |
+| Status polling (GET) | Free | — |
+
+---
+
+### Deepgram
+
+**Plan**: Pay-as-you-go · Nova-2 model
+**Docs**: https://developers.deepgram.com/reference/deepgram-api-overview
+
+| Endpoint | Rate | Notes |
+|----------|------|-------|
+| `POST /v1/listen` (Nova-2) | **$0.0059/min** ($0.35/hr) | Pre-recorded audio transcription |
+
+Typical: 5-min video = **~$0.030**
+
+---
+
+### ElevenLabs
+
+**Plan**: Pay-as-you-go
+**Docs**: https://elevenlabs.io/docs/api-reference/introduction
+
+| Endpoint | Rate | Notes |
+|----------|------|-------|
+| `POST /v1/text-to-speech/{voice_id}` | **~$0.30/1K chars** (TBC) | Exact PAYG rate to be confirmed |
+
+---
+
+### Firecrawl
+
+**Plan**: Starter · usage-based → **~$0.002 / page scrape**
+**Docs**: https://docs.firecrawl.dev/api-reference/v2-introduction
+
+| Endpoint | Rate | Notes |
+|----------|------|-------|
+| `POST /v1/scrape` | **$0.002/page** | Used for competitor page scraping |
+
+---
+
+### ScreenshotOne
+
+**Plan**: Pay-as-you-go → **~$0.003 / screenshot**
+**Docs**: https://screenshotone.com/docs/getting-started/
+
+| Endpoint | Rate | Notes |
+|----------|------|-------|
+| `GET /take` | **$0.003/screenshot** | Style reference screenshots |
+
+---
+
+### Google PageSpeed
+
+**Free** (rate-limited). No account or payment required.
+**Docs**: https://developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed
+
+---
+
+## Skill Cost Breakdowns
 
 ### ahrefs-keyword-discovery
-Reference: https://docs.ahrefs.com/docs/api/reference/introduction
 
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/keywords-explorer/matching-terms` | Per seed keyword | N seeds (max 3) | 50 (min) — select=keyword only | $0.03 |
-| `/keywords-explorer/related-terms` | Per seed keyword | N seeds (max 3) | 50 (min) — select=keyword only | $0.03 |
-| `/keywords-explorer/search-suggestions` | Per seed keyword | N seeds (max 3) | 50 (min) — select=keyword only | $0.03 |
-| `/keywords-explorer/overview` | Bulk enrichment (≤1000 kw/call) | 1–2 | 2,150–7,740 — 43u/row × 50-180 kw | $1.34–$4.82 |
-| `/keywords-explorer/volume-history` | Top 5 keywords by volume | 5 | 50 (min) per call | $0.03 |
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/keywords-explorer/matching-terms` | 3 (1/seed, max 3 seeds) | $0.03 | $0.09 |
+| `/keywords-explorer/related-terms` | 3 | $0.03 | $0.09 |
+| `/keywords-explorer/search-suggestions` | 3 | $0.03 | $0.09 |
+| `/keywords-explorer/overview` | 1–2 | $1.34–$4.82 | $1.34–$9.64 |
+| `/keywords-explorer/volume-history` | 5 (top 5 kw) | $0.03 | $0.15 |
 
-**Expansion calls** (matching/related/suggestions): `select=keyword` only → per_row_cost = 1 → each call = **50 units** (minimum). **3 seeds** (max) × 3 endpoints = 9 calls = **450 units** ($0.28).
-
-**Overview enrichment**: typical `select=keyword,volume,difficulty,cpc,intents,traffic_potential,parent_topic` → per_row_cost = 43 (4 × 10u fields + 3 × 1u) → 50–180 unique kw after dedup → 2,150–7,740 units.
-
-**Volume history** (top 5 kw): 5 × 50 units minimum = **250 units** ($0.16).
-
-Typical total: **3,260–8,850 units/run** ($2.03–$5.51) · realistic max 22,910 units ($14.27 with 500 kw override)
+**Typical total**: $2.03–$5.51/run · realistic max $14.27 (500 kw override)
 Abort rule: any single call > 500 units → abort immediately.
 
 ---
 
 ### keyword-spy
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/site-explorer/organic-keywords` | Organic or both mode | 1 per domain | 1,020–3,400 — 34u/row × 30-100 rows | $0.64–$2.12 |
-| `/site-explorer/paid-pages` | Paid or both mode | 1 per competitor | 640–3,200 — 32u/row × 20-100 rows | $0.40–$1.99 |
-| `/keywords-explorer/overview` | Budget forecast (top 10 gap kw) | 1 | 1,290–4,300 — 43u/row × 30-100 kw | $0.80–$2.68 |
-| `/serp-overview/serp-overview` | Head-to-head (top 20 paid gap kw) | ≤20 | 50 (min) per keyword | $0.03 each |
-| `/site-explorer/top-pages` | Always | 1 per domain | ≥50 | ≥$0.03 |
-| `/site-explorer/organic-competitors` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/keywords-history` | Snapshot mode | 1 per domain | 1,020–3,400 — same select as organic-keywords | $0.64–$2.12 |
-| `/site-explorer/metrics` | Always | 1 per domain | ≥50 | ≥$0.03 |
-| `/batch-analysis` (POST) | Bulk domain metrics | 1 | ≥50 | ≥$0.03 |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | — | $0.0101/call |
 
-Typical total (both mode, 1 competitor): **3,200–9,000 units/run** ($1.99–$5.60)
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/site-explorer/organic-keywords` | 1–2 (own + competitor) | $0.64–$2.12 | $0.64–$4.24 |
+| `/site-explorer/paid-pages` | 1/competitor (paid/both mode) | $0.40–$1.99 | $0.40–$1.99 |
+| `/site-explorer/keywords-history` | 1/domain (snapshot mode) | $0.64–$2.12 | $0.64–$2.12 |
+| `/site-explorer/top-pages` | 1/domain | $0.14–$0.69 | $0.14–$0.69 |
+| `/site-explorer/organic-competitors` | 1 | $0.03 | $0.03 |
+| `/site-explorer/metrics` | 1/domain | $0.03 | $0.03 |
+| `/keywords-explorer/overview` | 1 (budget forecast) | $0.80–$2.68 | $0.80–$2.68 |
+| `/serp-overview/serp-overview` | ≤20 (paid gap kw) | $0.03 each | ≤$0.60 |
+| `/batch-analysis` | 1 | $0.03 | $0.03 |
+| DataForSEO `domain_rank_overview` | 0–1 (optional fallback) | $0.0101 | $0–$0.01 |
+
+**Typical total**: $1.99–$5.60/run (both mode, 1 competitor)
 
 ---
 
 ### backlink-profiler
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/site-explorer/metrics` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/domain-rating` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/backlinks-stats` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/refdomains` | Always | 1 | ≥50 (10u fields, scales with rows) | ≥$0.03 |
-| `/site-explorer/anchors` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/refdomains-history` | Always | 1 | ≥50 (scales with rows) | ≥$0.03 |
-| `/site-explorer/domain-rating-history` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/broken-backlinks` | Always | 1 | ≥50 | ≥$0.03 |
-| `/batch-analysis` (POST) | Cohort comparison (Step 6) | 1 | ≥50 | ≥$0.03 |
 
-Typical total: **400–6,000 units/run** ($0.25–$3.74) — high end driven by refdomains/backlinks rows at 10u fields
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/site-explorer/metrics` | 1 | $0.03 | $0.03 |
+| `/site-explorer/domain-rating` | 1 | $0.03 | $0.03 |
+| `/site-explorer/backlinks-stats` | 1 | $0.03 | $0.03 |
+| `/site-explorer/refdomains` | 1 | $0.03–$0.50 | $0.03–$0.50 |
+| `/site-explorer/anchors` | 1 | $0.05–$0.25 | $0.05–$0.25 |
+| `/site-explorer/refdomains-history` | 1 | $0.04–$0.45 | $0.04–$0.45 |
+| `/site-explorer/domain-rating-history` | 1 | $0.04–$0.45 | $0.04–$0.45 |
+| `/site-explorer/broken-backlinks` | 1 | $0.03 | $0.03 |
+| `/batch-analysis` | 1 (cohort comparison) | $0.03 | $0.03 |
+
+**Typical total**: $0.25–$3.74/run — high end driven by refdomains/backlinks at large row counts
 
 ---
 
 ### find-competitors
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/site-explorer/organic-competitors` | Always | 1 | ≥50 | ≥$0.03 |
-| `/serp-overview/serp-overview` | Per seed keyword for SERP validation | 1–5 | 50 (min) per keyword | $0.03 each |
-| `/site-explorer/top-pages` | Always | 1 | ≥50 | ≥$0.03 |
-| `/site-explorer/metrics` | Per discovered competitor | 3–5 | ≥50 | ≥$0.03 |
-| `/keywords-explorer/overview` | Per competitor keyword enrichment | 1 per competitor | 1,290–4,300 — 43u/row × 30-100 kw | $0.80–$2.68 |
 
-Typical total: **400–1,500 units/run** ($0.25–$0.93)
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/site-explorer/organic-competitors` | 1 | $0.03 | $0.03 |
+| `/serp-overview/serp-overview` | 1–5 (SERP validation) | $0.03 each | $0.03–$0.15 |
+| `/site-explorer/top-pages` | 1 | $0.14–$0.69 | $0.14–$0.69 |
+| `/site-explorer/metrics` | 3–5 (per competitor) | $0.03 each | $0.09–$0.15 |
+| `/keywords-explorer/overview` | 1/competitor | $0.80–$2.68 | $0.80–$2.68 |
+
+**Typical total**: $0.25–$0.93/run
 
 ---
 
 ### site-audit
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/site-audit/projects` | Always — resolve project_id | 1 | 0 | **Free** |
-| `/site-audit/issues` | Always | 1 | 50 (fixed) | $0.03 |
-| `/site-audit/page-explorer` | Always | 1 | 50 (fixed) | $0.03 |
-| Firecrawl `/v1/scrape` | Tier B deep audit (top 3 pages) | 3–5 | — | $0.002/page |
-| Google PageSpeed `/runPagespeed` | Tier B deep audit | 1 per page | — | **Free** |
 
-Typical total: **100 Ahrefs units ($0.06) + 3–5 Firecrawl scrapes ($0.006–$0.01)**
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/site-audit/projects` | 1 | Free | — |
+| `/site-audit/issues` | 1 | $0.03 | $0.03 |
+| `/site-audit/page-explorer` | 1 | $0.03 | $0.03 |
+| Firecrawl `/v1/scrape` | 3–5 (Tier B only) | $0.002 | $0.006–$0.01 |
+| Google PageSpeed `/runPagespeed` | 1/page (Tier B only) | Free | — |
+
+**Typical total**: $0.06 Ahrefs + $0.006–$0.01 Firecrawl
 
 ---
 
 ### trend-analyzer
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/keywords-explorer/volume-history` | Per keyword | N keywords (max 5) | 50 (min) per call | $0.03 |
-| `/keywords-explorer/volume-by-country` | Per keyword | N keywords | 50 (min) per call | $0.03 |
-| `/keywords-explorer/overview` | Bulk current metrics | 1 | 2,150–4,300 — 43u/row × 50-100 kw | $1.34–$2.68 |
-| `/serp-overview/serp-overview` | SERP snapshot per keyword | N keywords | 50 (min) per keyword | $0.03 each |
 
-Typical total: **550–2,200 units/run** ($0.34–$1.37) — overview call dominates at 43 units/row × up to 50 rows
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/keywords-explorer/volume-history` | N kw (max 5) | $0.03 each | $0.03–$0.15 |
+| `/keywords-explorer/volume-by-country` | N kw | $0.03 each | $0.03–$0.15 |
+| `/keywords-explorer/overview` | 1 | $1.34–$2.68 | $1.34–$2.68 |
+| `/serp-overview/serp-overview` | N kw | $0.03 each | $0.03–$0.15 |
+
+**Typical total**: $0.34–$1.37/run
 
 ---
 
 ### serp-ads-monitor
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/serp-overview/serp-overview` | Per keyword | N keywords | 50 (min) per keyword | $0.03 each |
-| `/keywords-explorer/overview` | Batch enrichment (≤100 kw/call) | 1 | 1,290–4,300 — 43u/row × 30-100 kw | $0.80–$2.68 |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid slots | 1 per zero-result keyword | — | $0.0101/call |
 
-Typical total: **500–4,300 units/run** ($0.31–$2.68) — overview call at 43u/row × 100 rows = 4,300 units
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/serp-overview/serp-overview` | N keywords | $0.03 each | $0.03–$0.60 |
+| `/keywords-explorer/overview` | 1 (batch enrichment) | $0.80–$2.68 | $0.80–$2.68 |
+| DataForSEO `domain_rank_overview` | 0–1/zero-result kw (optional) | $0.0101 | $0–$0.03 |
+
+**Typical total**: $0.31–$2.68/run
 
 ---
 
 ### landing-page-spy
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `/site-explorer/paid-pages` | Per competitor domain | 1 per competitor | 640–3,200 — 32u/row × 20-100 rows | $0.40–$1.99 |
-| `/keywords-explorer/overview` | Batch keyword enrichment (≤100 kw/call) | 1–2 | 1,290–4,300 — 43u/row × 30-100 kw | $0.80–$2.68 |
-| Firecrawl `/v1/scrape` | Tier A: unknown-type pages; Tier B: top 3 by traffic | 1–10 per competitor | — | $0.002/page |
-| Google PageSpeed `/runPagespeed` | Tier B only | 1–3 per competitor | — | **Free** |
-| DataForSEO `domain_rank_overview` | **Optional** — only if Ahrefs shows 0 paid pages | 1 per zero-result domain | — | $0.0101/call |
 
-Typical total: **600–5,000 Ahrefs units ($0.37–$3.11) + 3–10 Firecrawl scrapes ($0.006–$0.02)** — high end driven by paid-pages (32u/row × 100 rows = 3,200 units) + kw overview (43u/row × 100 rows = 4,300 units)
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| `/site-explorer/paid-pages` | 1/competitor | $0.40–$1.99 | $0.40–$1.99 |
+| `/keywords-explorer/overview` | 1–2 | $0.80–$2.68 | $0.80–$5.36 |
+| Firecrawl `/v1/scrape` | 1–10/competitor | $0.002 | $0.002–$0.02 |
+| Google PageSpeed `/runPagespeed` | 1–3/competitor (Tier B) | Free | — |
+| DataForSEO `domain_rank_overview` | 0–1/zero-result domain (optional) | $0.0101 | $0–$0.01 |
+
+**Typical total**: $0.37–$3.11/run (Ahrefs) + $0.006–$0.02 (Firecrawl)
 
 ---
 
 ### mention-tracker
-| Endpoint | Trigger | Calls/run | Units/call | USD/call |
-|----------|---------|-----------|------------|----------|
-| `POST /management/brand-radar-reports` | Create report if not exists | 0–1 | 0 | **Free** |
-| `GET /management/brand-radar-reports` | List existing reports | 1 | 0 | **Free** |
-| `POST /management/brand-radar-prompts` | Configure prompts | 0–1 | 0 | **Free** |
-| `GET /management/brand-radar-prompts` | List prompts | 1 | 0 | **Free** |
-| `PATCH /management/brand-radar-reports` | Update prompts on report | 0–1 | 0 | **Free** |
-| `/brand-radar/mentions-overview` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/mentions-history` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/sov-overview` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/sov-history` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/impressions-overview` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/ai-responses` | Always | 1 per data_source (1–7) | ≥50 | ≥$0.03 |
-| `/brand-radar/cited-pages` | Always | 1 | ≥50 | ≥$0.03 |
-| `/brand-radar/cited-domains` | Always | 1 | ≥50 | ≥$0.03 |
 
-Typical total: **200–600 units/run** ($0.12–$0.37) — management calls are free; paid calls are all minimum 50 units
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| All `/management/brand-radar-*` | 3–5 | Free | — |
+| `/brand-radar/mentions-overview` | 1 | $0.03 | $0.03 |
+| `/brand-radar/mentions-history` | 1 | $0.03 | $0.03 |
+| `/brand-radar/sov-overview` | 1 | $0.03 | $0.03 |
+| `/brand-radar/sov-history` | 1 | $0.03 | $0.03 |
+| `/brand-radar/impressions-overview` | 1 | $0.03 | $0.03 |
+| `/brand-radar/ai-responses` | 1–7 (per data_source) | $0.03 each | $0.03–$0.21 |
+| `/brand-radar/cited-pages` | 1 | $0.03 | $0.03 |
+| `/brand-radar/cited-domains` | 1 | $0.03 | $0.03 |
+
+**Typical total**: $0.12–$0.37/run
 
 ---
-
-### ads-media-plan
-
-#### `--platform google`
-
-| Sub-skill / Endpoint | Trigger | Calls/run | USD/call |
-|----------------------|---------|-----------|----------|
-| `/find-competitors` (sub-skill) | Always | 1 invocation | ~$0.59 · see find-competitors |
-| `/keyword-spy --mode paid` (sub-skill) | Always (skipped if competitive_google_ads_analysis.md exists) | 1 invocation | ~$2.20 · see keyword-spy |
-| `/serp-ads-monitor` (sub-skill) | Always | 1 invocation | ~$1.49 · see serp-ads-monitor |
-| `/landing-page-spy` (sub-skill) | Always | 1 invocation | ~$1.74 · see landing-page-spy |
-| `/site-explorer/paid-pages` | Direct — keyword annotation | 1 per competitor | $0.40–$1.99 |
-| `/keywords-explorer/overview` | Direct — CPC enrichment | 1 | $0.80–$2.68 |
-
-**End-to-end total (Google, standalone)**: ~$7.00–$9.50/run
-
-#### `--platform meta`
-
-| Sub-skill / Endpoint | Trigger | Calls/run | USD/call |
-|----------------------|---------|-----------|----------|
-| `/find-competitors` (sub-skill) | Always | 1 invocation | ~$0.59 · see find-competitors |
-| `/ad-creative-spy` (sub-skill) | Per competitor | 1 per competitor | ~$0.30 total · see ad-creative-spy |
-| `/landing-page-spy` (sub-skill) | Always | 1 invocation | ~$1.74 · see landing-page-spy |
-| `/site-explorer/paid-pages` | Direct — paid page annotations | 1 per competitor | $0.40–$1.99 |
-
-**End-to-end total (Meta)**: ~$2.80–$3.80/run
-
----
-
-### geo-analysis
-
-Orchestration skill — calls `/mention-tracker --channels ai` (2–3 invocations). No direct Ahrefs endpoint calls.
-
-| Sub-skill | Trigger | Calls/run | USD |
-|-----------|---------|-----------|-----|
-| `/mention-tracker` (own domain, standard) | Step 1 baseline | 1 | ~$0.06 |
-| `/mention-tracker` (own domain, deep) | Step 2 deep audit | 1 | ~$0.12 |
-| `/mention-tracker` (per competitor, deep) | Step 3 (2–3 competitors) | 2–3 | ~$0.12 each |
-
-Typical total: **~190–600 units/run** ($0.12–$0.37)
-
----
-
-### competitive-analysis
-
-Orchestration skill — cost = sum of sub-skills invoked per scope.
-
-| Scope | Sub-skills | End-to-end estimate |
-|-------|-----------|---------------------|
-| `--scope ads` | find-competitors + ad-creative-spy + landing-page-spy + generate-ad-creative | ~$2.50–$3.30 |
-| `--scope google-ads` | find-competitors + keyword-spy + serp-ads-monitor + landing-page-spy | ~$5.00–$7.00 |
-| `--scope geo` | find-competitors + geo-analysis | ~$0.60–$1.00 |
-| `--scope all` | all three scopes in parallel (sub-skills shared where possible) | ~$5.50–$8.00 |
-
-**Note**: `--scope all` does **not** invoke `app-store-spy`. Step 2-pre (AppTweak) runs only for app clients and uses a subset of AppTweak endpoints directly (market detection + competitor metrics + reviews) — not the full health mode. Add ~$1.50 AppTweak for app clients.
-
----
-
-## AppTweak Skills
-
-### app-store-spy
-Reference: `skills/app-store-spy/references/apptweak-api.md`
-**Rate**: $199/mo · 250,000 credits → **$0.000796/credit**
-
-| Endpoint | Trigger | Calls/run | Credits/call | USD/call |
-|----------|---------|-----------|-------------|----------|
-| `/usage/credits` | Pre-flight + post-run | 2 | 0 | **Free** |
-| `/apps/category-rankings/current.json` | Step 1 market scan (24 markets) | 24 | ~11/app | ~$0.009 |
-| `/apps/metadata.json` | Health mode Step 3 | 1 per app | ~11 | ~$0.009 |
-| `/apps/metadata/changes.json` | Health mode Step 3 | 1 per app | ~41 (30d) | ~$0.033 |
-| `/apps/category-rankings/current.json` | Health mode Step 3 (confirmed markets) | 1 per app × market | ~11 | ~$0.009 |
-| `/apps/category-rankings/history.json` | Health mode Step 3 | 1 per app × market | ~40 (30d, 1 app) | ~$0.032 |
-| `/apps/reviews/stats.json` | Health / reviews mode | 1 per app × market | ~39 (30d) · ~196 (30d, 5 apps) | ~$0.031–$0.156 |
-| `/apps/reviews/top-displayed.json` | Health mode (×2 sorts) / reviews mode | 2 per app × market | ~101/call (limit=100) | ~$0.080 |
-| `/apps/metrics/current.json` | Health mode Step 3 | 1 per app | ~516 (4 metrics) | **~$0.411** |
-| `/apps/metrics/history.json` | Health mode Step 3 | 1 per app | ~516 (30d) | **~$0.411** |
-| `/keywords/suggestions/app.json` | Health / keywords mode Step 4/6 | 1 per app | ~51 | ~$0.041 |
-| `/keywords/metrics/current.json` | Health / keywords mode (batches of 5) | ceil(N/5) | ~251/call (5kw×6metrics) | ~$0.200 |
-| `/apps/keywords-rankings/current.json` | Keywords mode Step 9 | 1 per app | 251–751 | $0.200–$0.598 |
-| `/keywords/suggestions/category.json` | Keywords mode Step 9 | 0–1 | ~501 | ~$0.399 |
-| `/charts/top-results/current.json` | Chart mode Step 13 | 1 per market | ~11 | ~$0.009 |
-| `/charts/top-results/history.json` | Chart mode Step 13 (optional) | 0–1 per market | varies | varies |
-| `/apps/reviews/search.json` | Reviews mode Step 12 | 1 per term × app × market | ~101 | ~$0.080 |
-| `/apps/reviews/top-displayed.json` (sort=most_useful) | Reviews mode Step 12b (UGC hooks) | 1 per app × country | ~101 | ~$0.080 |
-| `/apps/keywords/bids.json` | **`--probe-paid` only** | 1 per app | ~1,095 | **~$0.871** ⚠️ |
-| `/keywords/apps/bids.json` (SOV) | **`--probe-paid` only** | 1 per 5 kw | ~121 (5kw/30d) | ~$0.096 |
-
-**Estimated credits and USD per mode (1 app, 1 confirmed market):**
-
-| Mode | Credits | USD | Notes |
-|------|---------|-----|-------|
-| health (default) | ~4,200 | **~$3.34** | metrics_current/history (~1,032) + keyword enrichment (~2,510 for 50 kw) + pre-flight scan (~264) |
-| health + `--probe-paid` | +1,095/app | +**$0.87**/app | paid_keywords; SOV adds ~121 cr (+$0.10) |
-| keywords | ~1,500–2,500 | **~$1.19–$1.99** | keyword_suggestions + keyword_metrics batches |
-| chart | ~11–50 | **~$0.01–$0.04** | Cheapest mode |
-| reviews | ~500–700 | **~$0.40–$0.56** | reviews_stats + reviews_top × 2 |
-| reviews + UGC 12b | +101/app/country | +**$0.08**/app/country | Optional step |
-
-**Monthly budget headroom (250,000 cr/mo):**
-- health mode only: ~59 runs/month (1 app each)
-- chart mode only: ~5,000 runs/month
-
----
-
-## Foreplay Skills
-
-**Rate**: $99/mo · 100,000 credits/mo → **$0.00099/credit**
-Credit model: 1 credit per ad returned. Failed requests do NOT consume credits.
 
 ### ad-creative-spy
 
-| Endpoint | Trigger | Calls/run | Credits/call | USD/call |
-|----------|---------|-----------|-------------|----------|
-| `GET /v2/brands/domain` | Pre-flight brand lookup | 1 per competitor | 0 | **Free** |
-| `GET /v2/brands/{id}/ads` | Ad library pull | 1 per competitor | ~50 cr (limit=50 ads) | ~$0.050 |
-| `POST /v2/search/ads` | Discovery search (additional terms) | 0–1 per competitor | ~50 cr (limit=50 ads) | ~$0.050 |
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| Foreplay `GET /v2/brands/domain` | 1/competitor | Free | — |
+| Foreplay `GET /v2/brands/{id}/ads` | 1/competitor | ~$0.050 | ~$0.15 (3 competitors) |
+| Foreplay `POST /v2/search/ads` | 0–1/competitor | ~$0.050 | ~$0–$0.25 |
 
-Typical: 3 competitors × 100 cr each = **~300 credits/run** (~$0.30)
-High end: 5 competitors × 100 cr + 1 discovery search = **~600 credits/run** (~$0.59)
-
-**Monthly headroom (100,000 cr/mo):** ~333 runs/month (3 competitors each)
+**Typical total**: ~$0.30/run (3 competitors) · high end ~$0.59 (5 competitors + discovery)
 
 ---
-
-## Firecrawl Skills
-
-**Rate**: ~$0.002/page (Starter plan)
-
-| Skill | Endpoint | Trigger | Calls/run | USD/call |
-|-------|----------|---------|-----------|---------|
-| site-audit | `/v1/scrape` | Tier B (top 3 pages) | 3–5 | $0.002 |
-| landing-page-spy | `/v1/scrape` | Tier A (unknown pages) + Tier B (top 3) | 1–10/competitor | $0.002 |
-| generate-ad-creative | `/v1/scrape` | Competitor page reference | 1–5 | $0.002 |
-
----
-
-## Media / Creative Skills
 
 ### generate-ad-creative
 
-| Provider | Endpoint | Trigger | Calls/run | USD/call |
-|----------|----------|---------|-----------|---------|
-| Firecrawl | `/v1/scrape` | Competitor reference scrape | 1–5 | $0.002/page |
-| ScreenshotOne | `GET /take` | Style reference screenshot | 1–3 | $0.003/screenshot |
-| Gemini | `generateContent` (gemini-3.1-flash-image-preview) | Hero + variations + resizes | 1 + N + M | **$0.067/image** (1024×1024 · $60/1M output tokens · ~1,120 tokens/img) |
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| Firecrawl `/v1/scrape` | 1–5 | $0.002 | $0.002–$0.01 |
+| ScreenshotOne `GET /take` | 1–3 | $0.003 | $0.003–$0.009 |
+| Gemini `generateContent` (Flash Image) | 1 + variations + resizes | $0.067/image | $0.07–$0.40+ |
 
 ---
 
 ### clip-video
 
-| Provider | Endpoint | Trigger | Calls/run | USD/call |
-|----------|----------|---------|-----------|---------|
-| Deepgram | `POST /v1/listen` (Nova-2) | Audio transcription | 1 | $0.0059/min |
-| yt-dlp | local binary | URL input only | 0–1 | Free |
-| ffmpeg | local binary | Always | 1 (extract) + N×M (clips) | Free |
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| Deepgram `POST /v1/listen` (Nova-2) | 1 | $0.0059/min | varies |
+| yt-dlp (local) | 0–1 | Free | — |
+| ffmpeg (local) | 1 + N clips | Free | — |
 
-Typical: 5-min video = 5 min × $0.0059 = **~$0.030**
+Typical: 5-min video = **~$0.030**
+
+---
+
+### app-store-spy
+
+**Reference**: `skills/app-store-spy/references/apptweak-api.md`
+
+| Mode | Key endpoints called | Credits | USD |
+|------|---------------------|---------|-----|
+| health (default) | metrics_current/history + keyword enrichment + pre-flight scan | ~4,200 | **~$3.34** |
+| health + `--probe-paid` | + bids endpoints | +1,095/app | +**$0.87**/app |
+| keywords | keyword_suggestions + keyword_metrics batches | ~1,500–2,500 | **~$1.19–$1.99** |
+| chart | category-rankings/current | ~11–50 | **~$0.01–$0.04** |
+| reviews | reviews_stats + reviews_top × 2 | ~500–700 | **~$0.40–$0.56** |
+| reviews + UGC 12b | + reviews/top-displayed (sort=most_useful) | +101/app/country | +**$0.08**/app/country |
+
+**Monthly headroom** (250,000 cr/mo): ~59 health runs · ~5,000 chart runs
 
 ---
 
 ### video-creative-pipeline
 
-**Creatify rate**: $0.198/credit (Starter: $99/mo ÷ 500 cr)
+**Track A** (fal.ai Seedance + ElevenLabs narration)
 
-| Provider | Endpoint | Trigger | Calls/run | USD/call |
-|----------|----------|---------|-----------|---------|
-| Gemini | Files API upload | Always | 1 | Free |
-| Gemini | `generateContent` (2.5 Pro) | Always | 1 | varies by tokens |
-| fal.ai Seedance 2.0 | `POST fal-ai/bytedance/seedance-2/text-to-video` | Track A | 1 | $0.30/s std · $0.24/s fast |
-| fal.ai Seedance 2.0 | status polling | Track A polling | N | Free |
-| ElevenLabs | `POST /v1/text-to-speech/{voice_id}` | Track A (narration) | 1 | ~$0.30/1K chars (TBC) |
-| Creatify | `POST /personal_photo_avatar/` | Track B only | 1 | $0.198/s Aurora · $0.099/s Fast |
-| Creatify | `POST /ai_scripts/` | Track B script gen | 1 | $0.198/request (1 cr) |
-| Creatify | `POST /text_to_speech/` | Track B TTS | 1 | $0.198/30s (1 cr/30s) |
-| Creatify | `POST /lipsyncs/` | Track B only | 1 | $0.198/s Aurora · $0.099/s Fast |
-| Creatify | `GET /lipsyncs/{task_id}/` | Track B polling | N | Free |
-| Deepgram | `POST /v1/listen` | Track B (B-roll sync) | 1 | $0.0059/min |
-| Ahrefs (via sub-skills) | see find-competitors, ad-creative-spy | Always | per sub-skill | see Ahrefs table |
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| Gemini Files API upload | 1 | Free | — |
+| Gemini `generateContent` (2.5 Pro) | 1 | varies by tokens | ~$0.01–$0.10 |
+| fal.ai Seedance 2.0 text-to-video | 1 | $0.30/s std · $0.24/s fast | $3.00–$3.60 (10s) |
+| ElevenLabs `POST /v1/text-to-speech` | 1 | ~$0.30/1K chars | varies (TBC) |
 
-**Track B cost for a 10s video** (Aurora): avatar 10s ($1.98) + script ($0.20) + TTS 10s ($0.07) + lipsync 10s ($1.98) = **~$4.23** (~21.4 cr)
+**Track B** (Creatify avatar + lipsync)
 
----
+| Endpoint | Calls/run | USD/call | Subtotal |
+|----------|-----------|----------|---------|
+| Creatify `POST /ai_scripts/` | 1 | $0.198 | $0.198 |
+| Creatify `POST /text_to_speech/` | 1 | $0.198/30s | ~$0.07 (10s) |
+| Creatify `POST /personal_photo_avatar/` | 1 | $0.198/s Aurora | $1.98 (10s) |
+| Creatify `POST /lipsyncs/` | 1 | $0.198/s Aurora | $1.98 (10s) |
+| Deepgram `POST /v1/listen` | 1 | $0.0059/min | ~$0.03 |
 
-## DataForSEO (Cross-validation only)
-
-**Usage pattern**: DataForSEO is **not** a primary data source in any skill. It fires only as a cross-validation fallback when Ahrefs returns 0 paid activity for a competitor — to verify whether the zero is real or a coverage gap.
-
-**Auth**: `Authorization: Basic base64(LOGIN:PASSWORD)` — requires `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` env vars. If not set, cross-validation is silently skipped.
-
-| Endpoint | Path | Trigger | Used by | Cost |
-|----------|------|---------|---------|------|
-| `domain_rank_overview` | `POST /v3/dataforseo_labs/google/domain_rank_overview/live` | Ahrefs returns 0 paid pages/keywords | landing-page-spy, serp-ads-monitor, competitive-analysis | $0.01/task + $0.0001/item → **$0.0101/call** (1 domain) |
-
-**Pricing tier**: DataForSEO Labs "All Other Endpoints" — $0.01/task + $0.0001/item. `include_clickstream_data=true` doubles cost (not used).
-
-**Typical cost**: 0–3 calls/run → **$0–$0.03** — most runs will not call DataForSEO at all.
-
-**Output used**: `tasks[0].result[0].metrics.paid.keywords` + `metrics.paid.traffic` — cross-validated against Ahrefs. "No paid activity" conclusion only when **both sources confirm zero**.
+**Track B total (10s, Aurora)**: **~$4.20/run**
 
 ---
 
-## Free APIs (no cost)
+### ads-media-plan
 
-| API | Used by | Notes |
-|-----|---------|-------|
-| Google PageSpeed `/runPagespeed` | site-audit, landing-page-spy | Free, rate-limited |
-| Ahrefs `/site-audit/projects` | site-audit | Free endpoint |
-| AppTweak `/usage/credits` | app-store-spy | Free endpoint |
-| AppTweak management endpoints | mention-tracker | All `/management/brand-radar-*` are free |
-| fal.ai / Creatify polling | video-creative-pipeline | Status-check GETs are free |
-| Gemini Files API upload | video-creative-pipeline | Upload is free; generation is metered |
+**`--platform google`** (orchestration — calls 4 sub-skills + 2 direct endpoints)
+
+| Sub-skill / Endpoint | Calls/run | USD |
+|----------------------|-----------|-----|
+| `/find-competitors` | 1 | ~$0.59 |
+| `/keyword-spy --mode paid` | 1 (skipped if cached) | ~$2.20 |
+| `/serp-ads-monitor` | 1 | ~$1.49 |
+| `/landing-page-spy` | 1 | ~$1.74 |
+| `/site-explorer/paid-pages` (direct) | 1/competitor | $0.40–$1.99 |
+| `/keywords-explorer/overview` (direct) | 1 | $0.80–$2.68 |
+
+**End-to-end total**: ~$7.00–$9.50/run
+
+**`--platform meta`** (orchestration — calls 3 sub-skills + 1 direct endpoint)
+
+| Sub-skill / Endpoint | Calls/run | USD |
+|----------------------|-----------|-----|
+| `/find-competitors` | 1 | ~$0.59 |
+| `/ad-creative-spy` | 1 | ~$0.30 |
+| `/landing-page-spy` | 1 | ~$1.74 |
+| `/site-explorer/paid-pages` (direct) | 1/competitor | $0.40–$1.99 |
+
+**End-to-end total**: ~$2.80–$3.80/run
 
 ---
 
-## Rate Reference
+### geo-analysis
 
-| Provider | Unit | Reference rate | Notes |
-|----------|------|---------------|-------|
-| Ahrefs | API unit | **$0.0006225** ($249/mo ÷ 400K units) | `max(50, per_row_cost × rows)`; 10-unit fields dominate cost |
-| AppTweak | credit | **$0.000796** (Small: $199/mo ÷ 250K cr) | Call `/usage/credits` before/after to verify actual usage |
-| Foreplay | credit | **$0.00099** ($99/mo ÷ 100K cr) | 1 cr per ad returned |
-| Creatify | credit | **$0.198** (Starter: $99/mo ÷ 500 cr) | Aurora 1cr/s · Fast 0.5cr/s · Script 1cr/req · TTS 1cr/30s |
-| Firecrawl | page scrape | **$0.002** | Starter plan |
-| ScreenshotOne | screenshot | **$0.003** | Pay-as-you-go |
-| Deepgram Nova-2 | minute of audio | **$0.0059/min** ($0.35/hr · PAYG) | Nova-2 pay-as-you-go |
-| ElevenLabs | 1K characters | **~$0.30/1K chars** (TBC) | PAYG — exact rate to be confirmed |
-| Gemini 3.1 Flash Image | image (1024×1024) | **$0.067/image** | $60/1M output tokens · ~1,120 tokens/img |
-| fal.ai Seedance 2.0 | second of video (720p) | **$0.30/s std · $0.24/s fast** | 10s clip ≈ $3.00 std / $2.40 fast; image-to-video ×0.6 discount |
-| DataForSEO Labs | task + items | **$0.01/task + $0.0001/item** | `domain_rank_overview/live`: $0.0101/call. Labs "All Other Endpoints" tier. |
-| DataForSEO SERP Live | query | **$0.002/query** | Not currently used by any skill |
-| Google PageSpeed | — | **Free** | No charge |
+Orchestration skill — calls `/mention-tracker` only, no direct API calls.
+
+| Sub-skill | Calls/run | USD |
+|-----------|-----------|-----|
+| `/mention-tracker` (own domain, standard) — Step 1 | 1 | ~$0.06 |
+| `/mention-tracker` (own domain, deep) — Step 2 | 1 | ~$0.12 |
+| `/mention-tracker` (per competitor, deep) — Step 3 | 2–3 | ~$0.12 each |
+
+**Typical total**: $0.12–$0.37/run
+
+---
+
+### competitive-analysis
+
+Orchestration skill — cost = sum of scoped sub-skills.
+
+| Scope | Sub-skills invoked | End-to-end estimate |
+|-------|-------------------|---------------------|
+| `--scope ads` | find-competitors + ad-creative-spy + landing-page-spy + generate-ad-creative | ~$2.50–$3.30 |
+| `--scope google-ads` | find-competitors + keyword-spy + serp-ads-monitor + landing-page-spy | ~$5.00–$7.00 |
+| `--scope geo` | find-competitors + geo-analysis | ~$0.60–$1.00 |
+| `--scope all` | all three scopes, sub-skills shared where possible | ~$5.50–$8.00 |
+
+**Note**: `--scope all` does **not** invoke `app-store-spy`. For app clients only, Step 2-pre calls a subset of AppTweak endpoints directly (market detection + competitor metrics + reviews) — add ~$1.50 AppTweak.
